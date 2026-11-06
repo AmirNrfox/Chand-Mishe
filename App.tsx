@@ -687,12 +687,13 @@ export default function App() {
                 {isLoadingRate ? (
                   <ActivityIndicator size="small" color={isDark ? '#38BDF8' : '#4F46E5'} />
                 ) : cooldownSeconds > 0 ? (
-                  <Ionicons name="time-outline" size={13} color={t.textMuted} />
+                  <Ionicons name="time-outline" size={14} color={t.textMuted} />
                 ) : (
-                  <Ionicons name="sync-outline" size={13} color={isDark ? '#38BDF8' : '#4F46E5'} />
+                  <Ionicons name="cloud-download-outline" size={14} color={isDark ? '#38BDF8' : '#4F46E5'} />
                 )}
 
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.fetchRateText,
                     {
@@ -1401,6 +1402,7 @@ const styles = StyleSheet.create({
   rateHeaderTitleWrap: {
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
   },
   rateLabelText: {
     fontSize: 13,
@@ -1415,9 +1417,11 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 20,
     borderWidth: 1,
+    flexShrink: 0,
   },
   fetchRateText: {
     fontSize: 11,
+    flexShrink: 0,
   },
   rateStatusRow: {
     alignItems: 'center',
