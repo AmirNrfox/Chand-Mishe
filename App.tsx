@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,6 +37,9 @@ const translations = {
     appSubtitle: 'محاسبه گر قیمت دلار و تومان',
     rateLabel: 'نرخ ۱ دلار:',
     rateUnit: 'تومان',
+    fetchLiveRate: 'دریافت نرخ روز',
+    fetchingRate: 'در حال دریافت...',
+    rateFetchError: 'خطا در دریافت نرخ آنلاین',
     inputTag: 'ورودی',
     usdTitle: 'مبلغ به دلار',
     tomanTitle: 'مبلغ به تومان',
@@ -56,6 +60,9 @@ const translations = {
     appSubtitle: 'USD & Toman Price Converter',
     rateLabel: '1 USD Rate:',
     rateUnit: 'Toman',
+    fetchLiveRate: 'Get Live Rate',
+    fetchingRate: 'Fetching...',
+    rateFetchError: 'Failed to fetch live rate',
     inputTag: 'INPUT',
     usdTitle: 'Amount in USD',
     tomanTitle: 'Amount in Toman',
@@ -169,6 +176,9 @@ export default function App() {
   const [history, setHistory] = useState<Array<{ id: string; usd: string; toman: string }>>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [isLoadingRate, setIsLoadingRate] = useState<boolean>(false);
+  const [rateStatusMessage, setRateStatusMessage] = useState<string>('');
+  const [rateStatusType, setRateStatusType] = useState<'success' | 'error'>('success');
 
   const t = isDark ? themes.dark : themes.light;
   const tr = translations[lang];
@@ -234,6 +244,74 @@ export default function App() {
       } else if (direction === 'TOMAN_TO_USD' && tomanInput) {
         calcFromToman(tomanInput, r);
       }
+    }
+  };
+
+  const fetchLiveRate = async () => {
+    setIsLoadingRate(true);
+    setRateStatusMessage('');
+    try {
+      let price: number | null = null;
+      let source = '';
+
+      // 1. Try Tetherland API
+      try {
+        const response = await fetch('https://api.tetherland.com/currencies', {
+          headers: { Accept: 'application/json' },
+        });
+        if (response.ok) {
+          const json = await response.json();
+          const p = json?.data?.currencies?.USDT?.price;
+          if (p && typeof p === 'number' && p > 0) {
+            price = p;
+            source = 'Tetherland';
+          }
+        }
+      } catch (e) {
+        console.log('Tetherland fetch error:', e);
+      }
+
+      // 2. Fallback to Wallex API if Tetherland failed
+      if (!price) {
+        try {
+          const response = await fetch('https://api.wallex.ir/v1/markets', {
+            headers: { Accept: 'application/json' },
+          });
+          if (response.ok) {
+            const json = await response.json();
+            const p = parseFloat(json?.result?.symbols?.USDTTMN?.stats?.lastPrice);
+            if (!isNaN(p) && p > 0) {
+              price = Math.round(p);
+              source = 'Wallex';
+            }
+          }
+        } catch (e) {
+          console.log('Wallex fetch error:', e);
+        }
+      }
+
+      if (price && price > 0) {
+        const priceStr = price.toString();
+        await handleRateChange(priceStr);
+        setRateStatusType('success');
+        const timeStr = new Date().toLocaleTimeString(lang === 'fa' ? 'fa-IR' : 'en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        setRateStatusMessage(
+          lang === 'fa'
+            ? `بروزرسانی آنلاین (${source}) در ${timeStr}`
+            : `Live updated (${source}) at ${timeStr}`
+        );
+      } else {
+        setRateStatusType('error');
+        setRateStatusMessage(tr.rateFetchError);
+      }
+    } catch (err) {
+      setRateStatusType('error');
+      setRateStatusMessage(tr.rateFetchError);
+    } finally {
+      setIsLoadingRate(false);
     }
   };
 
@@ -415,9 +493,30 @@ export default function App() {
                   {tr.rateLabel}
                 </Text>
               </View>
-              <Text style={[styles.rateSubInfo, { color: t.textMuted }, fontRegular]}>
-                {isRTL ? 'نرخ مبنای محاسبه' : 'Base conversion rate'}
-              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.fetchRateBtn,
+                  {
+                    backgroundColor: t.primaryBg,
+                    borderColor: t.primary,
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                  },
+                  isLoadingRate && { opacity: 0.7 },
+                ]}
+                onPress={fetchLiveRate}
+                disabled={isLoadingRate}
+                activeOpacity={0.7}
+              >
+                {isLoadingRate ? (
+                  <ActivityIndicator size="small" color={t.primary} />
+                ) : (
+                  <Ionicons name="cloud-download-outline" size={14} color={t.primary} />
+                )}
+                <Text style={[styles.fetchRateBtnText, { color: t.primary }, fontSemiBold]}>
+                  {isLoadingRate ? tr.fetchingRate : tr.fetchLiveRate}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <View
@@ -468,6 +567,25 @@ export default function App() {
                 </Text>
               </View>
             </View>
+
+            {rateStatusMessage !== '' && (
+              <View style={[styles.rateStatusRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <Ionicons
+                  name={rateStatusType === 'success' ? 'checkmark-circle-outline' : 'alert-circle-outline'}
+                  size={14}
+                  color={rateStatusType === 'success' ? t.accentGreen : '#EF4444'}
+                />
+                <Text
+                  style={[
+                    styles.rateStatusText,
+                    { color: rateStatusType === 'success' ? t.accentGreen : '#EF4444' },
+                    fontRegular,
+                  ]}
+                >
+                  {rateStatusMessage}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* کارت اصلی تبدیل مبالغ */}
@@ -893,6 +1011,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   rateSubInfo: {
+    fontSize: 11,
+  },
+  fetchRateBtn: {
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  fetchRateBtnText: {
+    fontSize: 11,
+  },
+  rateStatusRow: {
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  rateStatusText: {
     fontSize: 11,
   },
   rateInputContainer: {
