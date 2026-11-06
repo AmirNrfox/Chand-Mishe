@@ -16,7 +16,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   useFonts,
@@ -31,7 +31,17 @@ const THEME_STORAGE_KEY = '@chand_mishe_theme';
 const LANG_STORAGE_KEY = '@chand_mishe_lang';
 const HISTORY_STORAGE_KEY = '@chand_mishe_history';
 
+const CURRENT_APP_VERSION = '1.0.0';
+const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/AmirNrfox/Chand-Mishe/main/version.json';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/AmirNrfox/Chand-Mishe/releases/latest';
+
 type Language = 'fa' | 'en';
+
+type UpdateInfo = {
+  version: string;
+  releaseNotes: string;
+  downloadUrl: string;
+};
 
 const translations = {
   fa: {
@@ -55,12 +65,22 @@ const translations = {
     symbolToman: 'ت',
     usdUnit: 'دلار',
     appVersion: 'نسخه ۱.۰.۰',
-    aboutTitle: 'شناسنامه برنامه',
-    aboutDesc: 'ابزار سبک و سریع برای تبدیل آنلاین و آفلاین قیمت‌های دلاری و تتر به تومان بر اساس نرخ زنده یا دستی.',
+    aboutTitle: 'درباره برنامه',
+    aboutDesc: 'ابزار سبک و سریع برای تبدیل آنلاین و آفلاین قیمت های دلاری و تتر به تومان بر اساس نرخ زنده یا دستی.',
     devBy: 'طراحی و توسعه توسط امیرعلی نظری',
-    githubBtn: 'گیت‌هاب',
-    emailBtn: 'ارتباط ایمیلی',
+    githubBtn: 'گیت هاب',
+    telegramBtn: 'تلگرام',
+    emailBtn: 'ایمیل',
     closeModal: 'بستن',
+    checkUpdateBtn: 'بررسی نسخه جدید',
+    checkingUpdate: 'در حال بررسی...',
+    upToDateMsg: 'شما از آخرین نسخه برنامه استفاده می کنید.',
+    updateDialogTitle: 'نسخه جدید موجود است!',
+    updateAvailableDesc: 'نسخه جدیدی از برنامه منتشر شده است. آیا مایلید آن را دانلود و نصب کنید؟',
+    updateNotesLabel: 'تغییرات نسخه جدید:',
+    downloadUpdateBtn: 'دانلود و نصب نسخه جدید',
+    updateLaterBtn: 'بعدا',
+    newVersionBadge: 'جدید',
   },
   en: {
     appTitle: 'Chand Mishe?',
@@ -87,15 +107,25 @@ const translations = {
     aboutDesc: 'Lightweight tool to convert USD and USDT amounts to Toman using live rates or manual inputs.',
     devBy: 'Designed and Developed by AmirAli Nazari',
     githubBtn: 'GitHub',
+    telegramBtn: 'Telegram',
     emailBtn: 'Email',
     closeModal: 'Close',
+    checkUpdateBtn: 'Check for Updates',
+    checkingUpdate: 'Checking...',
+    upToDateMsg: 'You are using the latest version.',
+    updateDialogTitle: 'Update Available!',
+    updateAvailableDesc: 'A newer version of Chand Mishe is available. Would you like to download and install it?',
+    updateNotesLabel: 'Release Notes:',
+    downloadUpdateBtn: 'Download & Install',
+    updateLaterBtn: 'Later',
+    newVersionBadge: 'NEW',
   },
 };
 
 const themes = {
   dark: {
     bg: '#080C14',
-    headerGradients: ['#1E1B4B', '#0F172A', '#080C14'] as const, // گرادیانت شبانگاهی نیل‌گون تا سرمه‌ای
+    headerGradients: ['#1E1B4B', '#0F172A', '#080C14'] as const, // گرادیانت شبانگاهی نیل گون تا سرمه ای
     headerBorder: '#1E293B',
     logoGradients: ['#38BDF8', '#6366F1'] as const,
     swapGradients: ['#38BDF8', '#6366F1'] as const,
@@ -187,6 +217,19 @@ const fetchWithTimeout = async (url: string, timeoutMs: number = 6000) => {
   }
 };
 
+const isNewerVersion = (latest: string, current: string): boolean => {
+  const lParts = latest.replace(/[^0-9.]/g, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const cParts = current.replace(/[^0-9.]/g, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const maxLen = Math.max(lParts.length, cParts.length);
+  for (let i = 0; i < maxLen; i++) {
+    const l = lParts[i] || 0;
+    const c = cParts[i] || 0;
+    if (l > c) return true;
+    if (l < c) return false;
+  }
+  return false;
+};
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     VazirRegular: Vazirmatn_400Regular,
@@ -210,6 +253,11 @@ export default function App() {
   const [rateStatusMessage, setRateStatusMessage] = useState<string>('');
   const [rateStatusType, setRateStatusType] = useState<'success' | 'error'>('success');
 
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState<boolean>(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
+  const [updateStatusFeedback, setUpdateStatusFeedback] = useState<string>('');
+
   const t = isDark ? themes.dark : themes.light;
   const tr = translations[lang];
   const isRTL = lang === 'fa';
@@ -222,6 +270,10 @@ export default function App() {
 
   useEffect(() => {
     loadSavedData();
+    const updateTimer = setTimeout(() => {
+      checkForUpdates(false);
+    }, 1500);
+    return () => clearTimeout(updateTimer);
   }, []);
 
   useEffect(() => {
@@ -293,7 +345,7 @@ export default function App() {
     try {
       let price: number | null = null;
 
-      // 1. Try Tetherland API (تایم‌اوت ۶ ثانیه برای جلوگیری از فریز)
+      // 1. Try Tetherland API (تایم اوت ۶ ثانیه برای جلوگیری از فریز)
       try {
         const response = await fetchWithTimeout('https://api.tetherland.com/currencies', 6000);
         if (response.ok) {
@@ -307,7 +359,7 @@ export default function App() {
         console.log('Tetherland fetch error / timeout:', e);
       }
 
-      // 2. Fallback to Wallex API if Tetherland failed (تایم‌اوت ۶ ثانیه)
+      // 2. Fallback to Wallex API if Tetherland failed (تایم اوت ۶ ثانیه)
       if (!price) {
         try {
           const response = await fetchWithTimeout('https://api.wallex.ir/v1/markets', 6000);
@@ -327,7 +379,7 @@ export default function App() {
         const priceStr = price.toString();
         await handleRateChange(priceStr);
         setRateStatusType('success');
-        setCooldownSeconds(30); // تایم‌اوت ۳۰ ثانیه‌ای بین هر درخواست جهت جلوگیری از بلاک شدن آی‌پی
+        setCooldownSeconds(30); // تایم اوت ۳۰ ثانیه ای بین هر درخواست جهت جلوگیری از بلاک شدن آی پی
         const timeStr = new Date().toLocaleTimeString(lang === 'fa' ? 'fa-IR' : 'en-US', {
           hour: '2-digit',
           minute: '2-digit',
@@ -339,7 +391,7 @@ export default function App() {
         );
       } else {
         setRateStatusType('error');
-        setCooldownSeconds(10); // تایم‌اوت ۱۰ ثانیه در صورت خطا
+        setCooldownSeconds(10); // تایم اوت ۱۰ ثانیه در صورت خطا
         setRateStatusMessage(tr.rateFetchError);
       }
     } catch (err) {
@@ -348,6 +400,76 @@ export default function App() {
       setRateStatusMessage(tr.rateFetchError);
     } finally {
       setIsLoadingRate(false);
+    }
+  };
+
+  const checkForUpdates = async (manual: boolean = false) => {
+    if (manual) {
+      setIsCheckingUpdate(true);
+      setUpdateStatusFeedback('');
+    }
+    try {
+      let remoteVersion = '';
+      let notes = '';
+      let downloadUrl = 'https://github.com/AmirNrfox/Chand-Mishe/releases/latest';
+
+      // ۱. بررسی فایل version.json از ریپازیتوری گیت هاب با هدر جلوگیری از کش
+      try {
+        const res = await fetchWithTimeout(`${UPDATE_CHECK_URL}?t=${Date.now()}`, 5000);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.version) {
+            remoteVersion = data.version;
+            notes = lang === 'fa' ? (data.releaseNotes || '') : (data.releaseNotesEn || data.releaseNotes || '');
+            if (data.downloadUrl) downloadUrl = data.downloadUrl;
+          }
+        }
+      } catch (e) {
+        console.log('version.json fetch error:', e);
+      }
+
+      // ۲. در صورت در دسترس نبودن version.json، استفاده از API رسمی GitHub Releases
+      if (!remoteVersion) {
+        try {
+          const res = await fetchWithTimeout(GITHUB_RELEASES_API, 5000);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.tag_name) {
+              remoteVersion = data.tag_name.replace(/^v/, '');
+              notes = data.body || '';
+              if (data.assets && data.assets.length > 0 && data.assets[0].browser_download_url) {
+                downloadUrl = data.assets[0].browser_download_url;
+              } else if (data.html_url) {
+                downloadUrl = data.html_url;
+              }
+            }
+          }
+        } catch (e) {
+          console.log('GitHub releases fetch error:', e);
+        }
+      }
+
+      if (remoteVersion && isNewerVersion(remoteVersion, CURRENT_APP_VERSION)) {
+        setUpdateInfo({
+          version: remoteVersion,
+          releaseNotes: notes,
+          downloadUrl: downloadUrl,
+        });
+        setIsUpdateDialogOpen(true);
+        if (manual) setUpdateStatusFeedback('');
+      } else {
+        if (manual) {
+          setUpdateStatusFeedback(tr.upToDateMsg);
+        }
+      }
+    } catch (err) {
+      if (manual) {
+        setUpdateStatusFeedback(tr.upToDateMsg);
+      }
+    } finally {
+      if (manual) {
+        setIsCheckingUpdate(false);
+      }
     }
   };
 
@@ -451,7 +573,7 @@ export default function App() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardContainer}
       >
-        {/* هدر بالایی فیکس‌شده با گرادیانت چشم‌نواز و اختصاصی */}
+        {/* هدر بالایی فیکس شده با گرادیانت چشم نواز و اختصاصی */}
         <LinearGradient
           colors={t.headerGradients}
           start={{ x: 0, y: 0 }}
@@ -482,20 +604,23 @@ export default function App() {
               </Text>
             </View>
 
-            {/* کنترل‌های سریع اطلاعات، زبان و تم با استایل شیشه‌ای (Glassmorphism) */}
+            {/* کنترل های سریع اطلاعات، زبان و تم با استایل شیشه ای (Glassmorphism) */}
             <View style={[styles.headerActions, { flexDirection }]}>
               <TouchableOpacity
                 style={[
                   styles.actionIconBtn,
-                  { backgroundColor: t.headerBtnBg, borderColor: t.headerBtnBorder },
+                  {
+                    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                    borderColor: 'rgba(245, 158, 11, 0.4)',
+                  },
                 ]}
                 onPress={() => setIsAboutOpen(true)}
                 activeOpacity={0.7}
               >
                 <Ionicons
-                  name="information-circle-outline"
-                  size={20}
-                  color={t.primary}
+                  name="information-circle"
+                  size={21}
+                  color="#F59E0B"
                 />
               </TouchableOpacity>
 
@@ -748,7 +873,7 @@ export default function App() {
               <View style={[styles.swapLine, { backgroundColor: t.divider }]} />
             </View>
 
-            {/* ردیف نتیجه محاسبه‌شده */}
+            {/* ردیف نتیجه محاسبه شده */}
             <View style={styles.fieldBlock}>
               <View style={[styles.fieldHeader, { flexDirection }]}>
                 <Text
@@ -829,7 +954,7 @@ export default function App() {
             </View>
           </View>
 
-          {/* کلیدهای سریع مبالغ خرد دلاری با جهت صحیح فلش‌ها */}
+          {/* کلیدهای سریع مبالغ خرد دلاری با جهت صحیح فلش ها */}
           <View style={[styles.chipsContainer, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
             <View style={[styles.chipsHeadingRow, { flexDirection }]}>
               <View style={[styles.chipsTitleWrap, { flexDirection }]}>
@@ -839,7 +964,7 @@ export default function App() {
                 </Text>
               </View>
 
-              {/* جهت فیزیکی چپ‌به‌راست قطعی (LTR) بدون تأثیر موتور BiDi */}
+              {/* جهت فیزیکی چپ به راست قطعی (LTR) بدون تأثیر موتور BiDi */}
               <View style={[styles.hintArrowsContainer, { flexDirection: 'row' }]}>
                 <Ionicons name="caret-back" size={12} color={t.textMuted} />
                 <Text style={[styles.chipsHintScroll, { color: t.textMuted }, fontRegular]}>
@@ -914,7 +1039,7 @@ export default function App() {
                     </TouchableOpacity>
                   )}
 
-                  {/* دکمه باز و بسته کردن شیک، دایره‌ای با انیمیشن لمسی */}
+                  {/* دکمه باز و بسته کردن شیک، دایره ای با انیمیشن لمسی */}
                   <View style={[styles.chevronPill, { backgroundColor: t.chipBg }]}>
                     <Ionicons
                       name={isHistoryOpen ? 'chevron-up' : 'chevron-down'}
@@ -972,16 +1097,19 @@ export default function App() {
             </View>
           )}
 
-          {/* فوتر مینیمال نسخه */}
+          {/* فوتر پایین صفحه اصلی با نسخه و متن توسعه دهنده */}
           <View style={styles.footerContainer}>
             <Text style={[styles.footerVersionText, { color: t.textMuted }, fontRegular]}>
               {tr.appVersion}
+            </Text>
+            <Text style={[styles.footerAuthorText, { color: t.textSub }, fontSemiBold]}>
+              {tr.devBy}
             </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* مودال درباره برنامه و معرفی توسعه‌دهنده */}
+      {/* مودال درباره برنامه و معرفی توسعه دهنده */}
       <Modal
         visible={isAboutOpen}
         transparent={true}
@@ -1039,6 +1167,36 @@ export default function App() {
               {tr.aboutDesc}
             </Text>
 
+            {/* دکمه بررسی دستی بروزرسانی در مودال */}
+            <TouchableOpacity
+              style={[
+                styles.modalCheckUpdateBtn,
+                {
+                  backgroundColor: t.primaryBg,
+                  borderColor: t.primary,
+                  flexDirection: isRTL ? 'row-reverse' : 'row',
+                },
+              ]}
+              onPress={() => checkForUpdates(true)}
+              disabled={isCheckingUpdate}
+              activeOpacity={0.7}
+            >
+              {isCheckingUpdate ? (
+                <ActivityIndicator size="small" color={t.primary} />
+              ) : (
+                <Ionicons name="refresh-circle-outline" size={17} color={t.primary} />
+              )}
+              <Text style={[styles.modalCheckUpdateText, { color: t.primary }, fontSemiBold]}>
+                {isCheckingUpdate ? tr.checkingUpdate : tr.checkUpdateBtn}
+              </Text>
+            </TouchableOpacity>
+
+            {updateStatusFeedback !== '' && (
+              <Text style={[styles.updateStatusFeedbackText, { color: t.accentGreen }, fontRegular]}>
+                {updateStatusFeedback}
+              </Text>
+            )}
+
             <View style={[styles.modalDivider, { backgroundColor: t.divider }]} />
 
             {/* کارت سازنده */}
@@ -1050,8 +1208,8 @@ export default function App() {
                 {tr.devBy}
               </Text>
 
-              {/* دکمه‌های ارتباطی گیت‌هاب و ایمیل */}
-              <View style={[styles.modalSocialRow, { flexDirection }]}>
+              {/* دکمه های ارتباطی گیت هاب، تلگرام و ایمیل */}
+              <View style={[styles.modalSocialRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
                 <TouchableOpacity
                   style={[
                     styles.modalSocialBtn,
@@ -1080,6 +1238,24 @@ export default function App() {
                     },
                   ]}
                   activeOpacity={0.7}
+                  onPress={() => Linking.openURL('https://t.me/AmirAliNazari2001')}
+                >
+                  <FontAwesome name="telegram" size={17} color="#229ED9" />
+                  <Text style={[styles.modalSocialText, { color: t.textMain }, fontSemiBold]}>
+                    {tr.telegramBtn}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalSocialBtn,
+                    {
+                      backgroundColor: t.chipBg,
+                      borderColor: t.chipBorder,
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                    },
+                  ]}
+                  activeOpacity={0.7}
                   onPress={() => Linking.openURL('mailto:amirnrfox@gmail.com')}
                 >
                   <Ionicons name="mail-outline" size={16} color={t.textMain} />
@@ -1091,6 +1267,80 @@ export default function App() {
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* دیالوگ پاپ آپ نسخه جدید برنامه */}
+      <Modal
+        visible={isUpdateDialogOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsUpdateDialogOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.updateDialogCard,
+              { backgroundColor: t.card, borderColor: t.cardBorder },
+            ]}
+          >
+            <View style={[styles.updateHeroRow, { flexDirection }]}>
+              <View style={[styles.updateIconBadge, { backgroundColor: 'rgba(52, 211, 153, 0.16)' }]}>
+                <Ionicons name="sparkles" size={24} color="#34D399" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.updateDialogTitle, { color: t.textMain }, fontBold]}>
+                  {tr.updateDialogTitle}
+                </Text>
+                <Text style={[styles.updateVersionSubtitle, { color: t.primary }, fontSemiBold]}>
+                  v{updateInfo?.version || ''} ({tr.newVersionBadge})
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[styles.updateDialogDesc, { color: t.textSub }, fontRegular]}>
+              {tr.updateAvailableDesc}
+            </Text>
+
+            {updateInfo?.releaseNotes ? (
+              <View style={[styles.releaseNotesBox, { backgroundColor: t.cardInner, borderColor: t.inputBorder }]}>
+                <Text style={[styles.releaseNotesTitle, { color: t.textMuted }, fontSemiBold]}>
+                  {tr.updateNotesLabel}
+                </Text>
+                <Text style={[styles.releaseNotesContent, { color: t.textMain }, fontRegular]}>
+                  {updateInfo.releaseNotes}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.updateActionsCol}>
+              <TouchableOpacity
+                style={[styles.downloadUpdateBtn, { backgroundColor: t.primary }]}
+                activeOpacity={0.8}
+                onPress={() => {
+                  if (updateInfo?.downloadUrl) {
+                    Linking.openURL(updateInfo.downloadUrl);
+                  }
+                  setIsUpdateDialogOpen(false);
+                }}
+              >
+                <Ionicons name="cloud-download" size={18} color="#FFFFFF" />
+                <Text style={[styles.downloadUpdateBtnText, fontBold]}>
+                  {tr.downloadUpdateBtn}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.updateLaterBtn, { borderColor: t.chipBorder }]}
+                activeOpacity={0.7}
+                onPress={() => setIsUpdateDialogOpen(false)}
+              >
+                <Text style={[styles.updateLaterBtnText, { color: t.textMuted }, fontRegular]}>
+                  {tr.updateLaterBtn}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1473,10 +1723,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 18,
     marginBottom: 8,
+    gap: 4,
   },
   footerVersionText: {
     fontSize: 11,
     letterSpacing: 0.5,
+  },
+  footerAuthorText: {
+    fontSize: 12,
   },
   modalOverlay: {
     flex: 1,
@@ -1514,7 +1768,7 @@ const styles = StyleSheet.create({
   },
   modalHero: {
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   modalLogo: {
     width: 52,
@@ -1540,7 +1794,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
+  },
+  modalCheckUpdateBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+    alignSelf: 'center',
+  },
+  modalCheckUpdateText: {
+    fontSize: 12,
+  },
+  updateStatusFeedbackText: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   modalDivider: {
     height: 1,
@@ -1570,13 +1843,13 @@ const styles = StyleSheet.create({
   modalSocialRow: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     width: '100%',
   },
   modalSocialBtn: {
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
+    gap: 5,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
@@ -1584,6 +1857,81 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalSocialText: {
+    fontSize: 11,
+  },
+  updateDialogCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  updateHeroRow: {
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  updateIconBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  updateDialogTitle: {
+    fontSize: 17,
+  },
+  updateVersionSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  updateDialogDesc: {
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  releaseNotesBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 14,
+  },
+  releaseNotesTitle: {
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  releaseNotesContent: {
     fontSize: 12,
+    lineHeight: 18,
+  },
+  updateActionsCol: {
+    gap: 8,
+  },
+  downloadUpdateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  downloadUpdateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  updateLaterBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  updateLaterBtnText: {
+    fontSize: 13,
   },
 });
