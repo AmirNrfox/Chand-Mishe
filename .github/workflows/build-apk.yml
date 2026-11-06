@@ -68,7 +68,6 @@ jobs:
             -PreactNativeArchitectures=arm64-v8a,armeabi-v7a \
             -Pandroid.enableShrinkResourcesInReleaseBuilds=true
           cp app/build/outputs/apk/release/app-release.apk ../build-output/Chand-Mishe-v1.0.0-universal.apk
-          cp app/build/outputs/apk/release/app-release.apk ../build-output/Chand-Mishe-v1.0.0.apk
           echo "::endgroup::"
 
           ls -lh ../build-output/
