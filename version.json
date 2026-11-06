@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "versionCode": 1,
-  "releaseNotes": "نسخه ۱.۰.۰ برنامه چند میشه؟ با امکان استعلام نرخ لحظه‌ای تتر، تبدیل سریع مبالغ و تاریخچه محاسبات.",
-  "releaseNotesEn": "Chand Mishe v1.0.0: Live USDT rates, instant currency conversions, and history.",
+  "releaseNotes": "ابزاری سبک و سریع برای محاسبه قیمت خرید های دلاری شما به تومان یا بالعکس بر اساس نرخ آنلاین یا دستی",
+  "releaseNotesEn": "A lightweight and fast tool to calculate your USD purchase prices in Toman or vice versa based on live or custom rates",
   "downloadUrl": "https://github.com/AmirNrfox/Chand-Mishe/releases/latest"
 }

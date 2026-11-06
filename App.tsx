@@ -66,8 +66,10 @@ const translations = {
     usdUnit: 'دلار',
     appVersion: 'نسخه ۱.۰.۰',
     aboutTitle: 'درباره برنامه',
-    aboutDesc: 'ابزار سبک و سریع برای تبدیل آنلاین و آفلاین قیمت های دلاری و تتر به تومان بر اساس نرخ زنده یا دستی.',
+    aboutDesc: 'ابزاری سبک و سریع برای محاسبه قیمت خرید های دلاری شما به تومان یا بالعکس بر اساس نرخ آنلاین یا دستی',
     devBy: 'طراحی و توسعه توسط امیرعلی نظری',
+    footerDevPrefix: 'طراحی و توسعه توسط',
+    authorName: 'امیرعلی نظری',
     githubBtn: 'گیت هاب',
     telegramBtn: 'تلگرام',
     emailBtn: 'ایمیل',
@@ -104,8 +106,10 @@ const translations = {
     usdUnit: 'USD',
     appVersion: 'Version 1.0.0',
     aboutTitle: 'About App',
-    aboutDesc: 'Lightweight tool to convert USD and USDT amounts to Toman using live rates or manual inputs.',
+    aboutDesc: 'A lightweight and fast tool to calculate your USD purchase prices in Toman or vice versa based on live or custom rates',
     devBy: 'Designed and Developed by AmirAli Nazari',
+    footerDevPrefix: 'Designed and developed by',
+    authorName: 'AmirAli Nazari',
     githubBtn: 'GitHub',
     telegramBtn: 'Telegram',
     emailBtn: 'Email',
@@ -609,18 +613,15 @@ export default function App() {
               <TouchableOpacity
                 style={[
                   styles.actionIconBtn,
-                  {
-                    backgroundColor: 'rgba(245, 158, 11, 0.14)',
-                    borderColor: 'rgba(245, 158, 11, 0.4)',
-                  },
+                  { backgroundColor: t.headerBtnBg, borderColor: t.headerBtnBorder },
                 ]}
                 onPress={() => setIsAboutOpen(true)}
                 activeOpacity={0.7}
               >
                 <Ionicons
-                  name="information-circle"
-                  size={21}
-                  color="#F59E0B"
+                  name="information-circle-outline"
+                  size={20}
+                  color={t.primary}
                 />
               </TouchableOpacity>
 
@@ -1097,13 +1098,13 @@ export default function App() {
             </View>
           )}
 
-          {/* فوتر پایین صفحه اصلی با نسخه و متن توسعه دهنده */}
-          <View style={styles.footerContainer}>
-            <Text style={[styles.footerVersionText, { color: t.textMuted }, fontRegular]}>
-              {tr.appVersion}
+          {/* فوتر پایین صفحه اصلی */}
+          <View style={[styles.footerContainer, { flexDirection }]}>
+            <Text style={[styles.footerTextMuted, { color: t.textMuted }, fontRegular]}>
+              {tr.footerDevPrefix}{' '}
             </Text>
-            <Text style={[styles.footerAuthorText, { color: t.textSub }, fontSemiBold]}>
-              {tr.devBy}
+            <Text style={[styles.footerAuthor, { color: t.textMain }, fontBold]}>
+              {tr.authorName}
             </Text>
           </View>
         </ScrollView>
@@ -1721,15 +1722,13 @@ const styles = StyleSheet.create({
   footerContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 18,
+    marginTop: 20,
     marginBottom: 8,
-    gap: 4,
   },
-  footerVersionText: {
-    fontSize: 11,
-    letterSpacing: 0.5,
+  footerTextMuted: {
+    fontSize: 12,
   },
-  footerAuthorText: {
+  footerAuthor: {
     fontSize: 12,
   },
   modalOverlay: {
