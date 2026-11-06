@@ -16,7 +16,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.chandmishe.app"
+      "package": "com.chandmishe.app",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
