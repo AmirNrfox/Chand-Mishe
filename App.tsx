@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
+  Linking,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -52,9 +54,13 @@ const translations = {
     historyTitle: 'آخرین محاسبات:',
     symbolToman: 'ت',
     usdUnit: 'دلار',
-    footerMadeWith: 'ساخته شده با',
-    footerBy: 'توسط',
-    authorName: 'امیرعلی نظری',
+    appVersion: 'نسخه ۱.۰.۰',
+    aboutTitle: 'شناسنامه برنامه',
+    aboutDesc: 'ابزار سبک و سریع برای تبدیل آنلاین و آفلاین قیمت‌های دلاری و تتر به تومان بر اساس نرخ زنده یا دستی.',
+    devBy: 'طراحی و توسعه توسط امیرعلی نظری',
+    githubBtn: 'گیت‌هاب',
+    emailBtn: 'ارتباط ایمیلی',
+    closeModal: 'بستن',
   },
   en: {
     appTitle: 'Chand Mishe?',
@@ -76,9 +82,13 @@ const translations = {
     historyTitle: 'Recent Conversions:',
     symbolToman: 'TM',
     usdUnit: 'USD',
-    footerMadeWith: 'Made with',
-    footerBy: 'by',
-    authorName: 'AmirAli Nazari',
+    appVersion: 'Version 1.0.0',
+    aboutTitle: 'About App',
+    aboutDesc: 'Lightweight tool to convert USD and USDT amounts to Toman using live rates or manual inputs.',
+    devBy: 'Designed and Developed by AmirAli Nazari',
+    githubBtn: 'GitHub',
+    emailBtn: 'Email',
+    closeModal: 'Close',
   },
 };
 
@@ -193,6 +203,7 @@ export default function App() {
   const [direction, setDirection] = useState<'USD_TO_TOMAN' | 'TOMAN_TO_USD'>('USD_TO_TOMAN');
   const [history, setHistory] = useState<Array<{ id: string; usd: string; toman: string }>>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [isLoadingRate, setIsLoadingRate] = useState<boolean>(false);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
@@ -471,8 +482,23 @@ export default function App() {
               </Text>
             </View>
 
-            {/* کنترل‌های سریع تم و زبان با استایل شیشه‌ای (Glassmorphism) */}
+            {/* کنترل‌های سریع اطلاعات، زبان و تم با استایل شیشه‌ای (Glassmorphism) */}
             <View style={[styles.headerActions, { flexDirection }]}>
+              <TouchableOpacity
+                style={[
+                  styles.actionIconBtn,
+                  { backgroundColor: t.headerBtnBg, borderColor: t.headerBtnBorder },
+                ]}
+                onPress={() => setIsAboutOpen(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={20}
+                  color={t.primary}
+                />
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={[
                   styles.actionIconBtn,
@@ -946,21 +972,126 @@ export default function App() {
             </View>
           )}
 
-          {/* فوتر اختصاصی سازنده با فونت وزیرمتن */}
-          <View style={[styles.footerContainer, { flexDirection }]}>
-            <Text style={[styles.footerTextMuted, { color: t.textMuted }, fontRegular]}>
-              {tr.footerMadeWith}
-            </Text>
-            <Ionicons name="heart" size={14} color="#EF4444" style={styles.heartIcon} />
-            <Text style={[styles.footerTextMuted, { color: t.textMuted }, fontRegular]}>
-              {tr.footerBy}
-            </Text>
-            <Text style={[styles.footerAuthor, { color: t.textMain }, fontBold]}>
-              {tr.authorName}
+          {/* فوتر مینیمال نسخه */}
+          <View style={styles.footerContainer}>
+            <Text style={[styles.footerVersionText, { color: t.textMuted }, fontRegular]}>
+              {tr.appVersion}
             </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* مودال درباره برنامه و معرفی توسعه‌دهنده */}
+      <Modal
+        visible={isAboutOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsAboutOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsAboutOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[
+              styles.modalCard,
+              { backgroundColor: t.card, borderColor: t.cardBorder },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* هدر مودال */}
+            <View style={[styles.modalHeaderRow, { flexDirection }]}>
+              <Text style={[styles.modalTitleText, { color: t.textMain }, fontBold]}>
+                {tr.aboutTitle}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsAboutOpen(false)}
+                style={[styles.modalCloseBtn, { backgroundColor: t.chipBg }]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={18} color={t.textSub} />
+              </TouchableOpacity>
+            </View>
+
+            {/* نشان و نام اپلیکیشن */}
+            <View style={styles.modalHero}>
+              <LinearGradient
+                colors={t.logoGradients}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.modalLogo}
+              >
+                <MaterialCommunityIcons name="swap-horizontal-bold" size={28} color="#FFFFFF" />
+              </LinearGradient>
+              <Text style={[styles.modalAppName, { color: t.textMain }, fontBlack]}>
+                {tr.appTitle}
+              </Text>
+              <View style={[styles.modalVersionBadge, { backgroundColor: t.primaryBg }]}>
+                <Text style={[styles.modalVersionBadgeText, { color: t.primary }, fontBold]}>
+                  {tr.appVersion}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[styles.modalDescText, { color: t.textSub }, fontRegular]}>
+              {tr.aboutDesc}
+            </Text>
+
+            <View style={[styles.modalDivider, { backgroundColor: t.divider }]} />
+
+            {/* کارت سازنده */}
+            <View style={[styles.devCard, { backgroundColor: t.cardInner, borderColor: t.inputBorder }]}>
+              <View style={[styles.devIconWrap, { backgroundColor: t.primaryBg }]}>
+                <Ionicons name="code-slash" size={17} color={t.primary} />
+              </View>
+              <Text style={[styles.devLabel, { color: t.textMain }, fontBold]}>
+                {tr.devBy}
+              </Text>
+
+              {/* دکمه‌های ارتباطی گیت‌هاب و ایمیل */}
+              <View style={[styles.modalSocialRow, { flexDirection }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.modalSocialBtn,
+                    {
+                      backgroundColor: t.chipBg,
+                      borderColor: t.chipBorder,
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => Linking.openURL('https://github.com/AmirNrfox')}
+                >
+                  <Ionicons name="logo-github" size={16} color={t.textMain} />
+                  <Text style={[styles.modalSocialText, { color: t.textMain }, fontSemiBold]}>
+                    {tr.githubBtn}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalSocialBtn,
+                    {
+                      backgroundColor: t.chipBg,
+                      borderColor: t.chipBorder,
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => Linking.openURL('mailto:amirnrfox@gmail.com')}
+                >
+                  <Ionicons name="mail-outline" size={16} color={t.textMain} />
+                  <Text style={[styles.modalSocialText, { color: t.textMain }, fontSemiBold]}>
+                    {tr.emailBtn}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1340,17 +1471,119 @@ const styles = StyleSheet.create({
   footerContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  footerVersionText: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeaderRow: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalTitleText: {
+    fontSize: 15,
+  },
+  modalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalHero: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalLogo: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalAppName: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  modalVersionBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  modalVersionBadgeText: {
+    fontSize: 11,
+  },
+  modalDescText: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  modalDivider: {
+    height: 1,
+    width: '100%',
+    marginBottom: 14,
+  },
+  devCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    alignItems: 'center',
+    width: '100%',
+  },
+  devIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 6,
-    gap: 5,
   },
-  footerTextMuted: {
-    fontSize: 12,
+  devLabel: {
+    fontSize: 13,
+    marginBottom: 12,
+    textAlign: 'center',
   },
-  heartIcon: {
-    marginHorizontal: 1,
+  modalSocialRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    width: '100%',
   },
-  footerAuthor: {
+  modalSocialBtn: {
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  modalSocialText: {
     fontSize: 12,
   },
 });
