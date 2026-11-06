@@ -129,7 +129,7 @@ const translations = {
 const themes = {
   dark: {
     bg: '#080C14',
-    headerGradients: ['#1E1B4B', '#0F172A', '#080C14'] as const, // گرادیانت شبانگاهی نیل گون تا سرمه ای
+    headerGradients: ['#1E1B4B', '#0F172A', '#080C14'] as const,
     headerBorder: '#1E293B',
     logoGradients: ['#38BDF8', '#6366F1'] as const,
     swapGradients: ['#38BDF8', '#6366F1'] as const,
@@ -156,7 +156,7 @@ const themes = {
   },
   light: {
     bg: '#EEF2F6',
-    headerGradients: ['#E0E7FF', '#EEF2FF', '#F1F5F9'] as const, // گرادیانت شاداب صبحگاهی با حفظ کنتراست
+    headerGradients: ['#E0E7FF', '#EEF2FF', '#F1F5F9'] as const,
     headerBorder: '#CBD5E1',
     logoGradients: ['#4F46E5', '#06B6D4'] as const,
     swapGradients: ['#4F46E5', '#0284C7'] as const,
@@ -265,8 +265,6 @@ export default function App() {
   const t = isDark ? themes.dark : themes.light;
   const tr = translations[lang];
   const isRTL = lang === 'fa';
-
-  // استایل خانواده فونت وزیرمتن
   const fontRegular = fontsLoaded ? { fontFamily: 'VazirRegular' } : {};
   const fontSemiBold = fontsLoaded ? { fontFamily: 'VazirSemiBold' } : {};
   const fontBold = fontsLoaded ? { fontFamily: 'VazirBold' } : {};
@@ -349,7 +347,7 @@ export default function App() {
     try {
       let price: number | null = null;
 
-      // 1. Try Tetherland API (تایم اوت ۶ ثانیه برای جلوگیری از فریز)
+      // 1. Try Tetherland API
       try {
         const response = await fetchWithTimeout('https://api.tetherland.com/currencies', 6000);
         if (response.ok) {
@@ -363,7 +361,7 @@ export default function App() {
         console.log('Tetherland fetch error / timeout:', e);
       }
 
-      // 2. Fallback to Wallex API if Tetherland failed (تایم اوت ۶ ثانیه)
+      // 2. Fallback: Wallex API
       if (!price) {
         try {
           const response = await fetchWithTimeout('https://api.wallex.ir/v1/markets', 6000);
@@ -383,7 +381,7 @@ export default function App() {
         const priceStr = price.toString();
         await handleRateChange(priceStr);
         setRateStatusType('success');
-        setCooldownSeconds(30); // تایم اوت ۳۰ ثانیه ای بین هر درخواست جهت جلوگیری از بلاک شدن آی پی
+        setCooldownSeconds(30);
         const timeStr = new Date().toLocaleTimeString(lang === 'fa' ? 'fa-IR' : 'en-US', {
           hour: '2-digit',
           minute: '2-digit',
@@ -395,7 +393,7 @@ export default function App() {
         );
       } else {
         setRateStatusType('error');
-        setCooldownSeconds(10); // تایم اوت ۱۰ ثانیه در صورت خطا
+        setCooldownSeconds(10);
         setRateStatusMessage(tr.rateFetchError);
       }
     } catch (err) {
@@ -416,8 +414,6 @@ export default function App() {
       let remoteVersion = '';
       let notes = '';
       let downloadUrl = 'https://github.com/AmirNrfox/Chand-Mishe/releases/latest';
-
-      // ۱. بررسی فایل version.json از ریپازیتوری گیت هاب با هدر جلوگیری از کش
       try {
         const res = await fetchWithTimeout(`${UPDATE_CHECK_URL}?t=${Date.now()}`, 5000);
         if (res.ok) {
@@ -431,8 +427,6 @@ export default function App() {
       } catch (e) {
         console.log('version.json fetch error:', e);
       }
-
-      // ۲. در صورت در دسترس نبودن version.json، استفاده از API رسمی GitHub Releases
       if (!remoteVersion) {
         try {
           const res = await fetchWithTimeout(GITHUB_RELEASES_API, 5000);
@@ -551,7 +545,6 @@ export default function App() {
     if (!usd || !toman) return;
     const item = { id: Date.now().toString(), usd, toman };
     setHistory((prev) => {
-      // ذخیره تا 30 تبدیل آخر به جای 5 تا
       const filtered = prev.filter((i) => i.usd !== usd).slice(0, 29);
       const updated = [item, ...filtered];
       AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
@@ -577,7 +570,6 @@ export default function App() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardContainer}
       >
-        {/* هدر بالایی فیکس شده با گرادیانت چشم نواز و اختصاصی */}
         <LinearGradient
           colors={t.headerGradients}
           start={{ x: 0, y: 0 }}
@@ -590,7 +582,6 @@ export default function App() {
           <View style={[styles.topBar, { flexDirection }]}>
             <View style={[styles.brandContainer, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
               <View style={[styles.titleRow, { flexDirection }]}>
-                {/* لوگوی اختصاصی با گرادیانت نئونی */}
                 <LinearGradient
                   colors={t.logoGradients}
                   start={{ x: 0, y: 0 }}
@@ -607,8 +598,6 @@ export default function App() {
                 {tr.appSubtitle}
               </Text>
             </View>
-
-            {/* کنترل های سریع اطلاعات، زبان و تم با استایل شیشه ای (Glassmorphism) */}
             <View style={[styles.headerActions, { flexDirection }]}>
               <TouchableOpacity
                 style={[
@@ -621,7 +610,7 @@ export default function App() {
                 <Ionicons
                   name="information-circle-outline"
                   size={20}
-                  color={t.primary}
+                  color={isDark ? '#A78BFA' : '#7C3AED'}
                 />
               </TouchableOpacity>
 
@@ -661,7 +650,6 @@ export default function App() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* کارت تنظیم نرخ دلار */}
           <View style={[styles.rateCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
             <View style={[styles.rateHeaderRow, { flexDirection }]}>
               <View style={[styles.rateHeaderTitleWrap, { flexDirection }]}>
@@ -675,29 +663,29 @@ export default function App() {
                 style={[
                   styles.fetchRateBtn,
                   {
-                    backgroundColor: cooldownSeconds > 0 ? t.chipBg : t.primaryBg,
-                    borderColor: cooldownSeconds > 0 ? t.chipBorder : t.primary,
+                    backgroundColor: t.headerBtnBg,
+                    borderColor: t.headerBtnBorder,
                     flexDirection: isRTL ? 'row-reverse' : 'row',
                   },
-                  (isLoadingRate || cooldownSeconds > 0) && { opacity: 0.8 },
+                  (isLoadingRate || cooldownSeconds > 0) && { opacity: 0.75 },
                 ]}
                 onPress={fetchLiveRate}
                 disabled={isLoadingRate || cooldownSeconds > 0}
                 activeOpacity={0.7}
               >
                 {isLoadingRate ? (
-                  <ActivityIndicator size="small" color={t.primary} />
+                  <ActivityIndicator size="small" color={isDark ? '#38BDF8' : t.primary} />
                 ) : (
                   <Ionicons
                     name={cooldownSeconds > 0 ? 'time-outline' : 'cloud-download-outline'}
                     size={14}
-                    color={cooldownSeconds > 0 ? t.textMuted : t.primary}
+                    color={cooldownSeconds > 0 ? t.textMuted : isDark ? '#38BDF8' : t.primary}
                   />
                 )}
                 <Text
                   style={[
                     styles.fetchRateBtnText,
-                    { color: cooldownSeconds > 0 ? t.textMuted : t.primary },
+                    { color: cooldownSeconds > 0 ? t.textMuted : isDark ? '#38BDF8' : t.primary },
                     fontSemiBold,
                   ]}
                 >
@@ -780,10 +768,7 @@ export default function App() {
               </View>
             )}
           </View>
-
-          {/* کارت اصلی تبدیل مبالغ */}
           <View style={[styles.mainCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
-            {/* ردیف ورودی فعال */}
             <View style={styles.fieldBlock}>
               <View style={[styles.fieldHeader, { flexDirection }]}>
                 <Text
@@ -854,8 +839,6 @@ export default function App() {
                 )}
               </View>
             </View>
-
-            {/* کلید جابجایی دوطرفه با آیکون اصلی و کلاسیک همراه گرادیانت */}
             <View style={styles.swapSection}>
               <View style={[styles.swapLine, { backgroundColor: t.divider }]} />
               <TouchableOpacity
@@ -873,8 +856,6 @@ export default function App() {
               </TouchableOpacity>
               <View style={[styles.swapLine, { backgroundColor: t.divider }]} />
             </View>
-
-            {/* ردیف نتیجه محاسبه شده */}
             <View style={styles.fieldBlock}>
               <View style={[styles.fieldHeader, { flexDirection }]}>
                 <Text
@@ -954,8 +935,6 @@ export default function App() {
               </View>
             </View>
           </View>
-
-          {/* کلیدهای سریع مبالغ خرد دلاری با جهت صحیح فلش ها */}
           <View style={[styles.chipsContainer, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
             <View style={[styles.chipsHeadingRow, { flexDirection }]}>
               <View style={[styles.chipsTitleWrap, { flexDirection }]}>
@@ -964,8 +943,6 @@ export default function App() {
                   {' '}{tr.quickTitle}
                 </Text>
               </View>
-
-              {/* جهت فیزیکی چپ به راست قطعی (LTR) بدون تأثیر موتور BiDi */}
               <View style={[styles.hintArrowsContainer, { flexDirection: 'row' }]}>
                 <Ionicons name="caret-back" size={12} color={t.textMuted} />
                 <Text style={[styles.chipsHintScroll, { color: t.textMuted }, fontRegular]}>
@@ -1003,8 +980,6 @@ export default function App() {
               ))}
             </ScrollView>
           </View>
-
-          {/* تاریخچه محاسبات اخیر به همراه آیکون سطل آشغال قرمز */}
           {history.length > 0 && (
             <View style={[styles.histCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
               <TouchableOpacity
@@ -1025,7 +1000,6 @@ export default function App() {
                 </View>
 
                 <View style={[styles.histHeaderRightControls, { flexDirection }]}>
-                  {/* آیکون سطل آشغال قرمز با فاصله امن و دکمه اختصاصی */}
                   {isHistoryOpen && (
                     <TouchableOpacity
                       onPress={(e) => {
@@ -1039,8 +1013,6 @@ export default function App() {
                       <Ionicons name="trash-outline" size={17} color="#EF4444" />
                     </TouchableOpacity>
                   )}
-
-                  {/* دکمه باز و بسته کردن شیک، دایره ای با انیمیشن لمسی */}
                   <View style={[styles.chevronPill, { backgroundColor: t.chipBg }]}>
                     <Ionicons
                       name={isHistoryOpen ? 'chevron-up' : 'chevron-down'}
@@ -1050,8 +1022,6 @@ export default function App() {
                   </View>
                 </View>
               </TouchableOpacity>
-
-              {/* محتوای بازشونده تاریخچه به همراه اسکرول داخلی */}
               {isHistoryOpen && (
                 <View style={styles.histBody}>
                   <ScrollView
@@ -1097,8 +1067,6 @@ export default function App() {
               )}
             </View>
           )}
-
-          {/* فوتر پایین صفحه اصلی */}
           <View style={[styles.footerContainer, { flexDirection }]}>
             <Text style={[styles.footerTextMuted, { color: t.textMuted }, fontRegular]}>
               {tr.footerDevPrefix}{' '}
@@ -1109,8 +1077,6 @@ export default function App() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* مودال درباره برنامه و معرفی توسعه دهنده */}
       <Modal
         visible={isAboutOpen}
         transparent={true}
@@ -1130,7 +1096,6 @@ export default function App() {
             ]}
             onPress={(e) => e.stopPropagation()}
           >
-            {/* هدر مودال */}
             <View style={[styles.modalHeaderRow, { flexDirection }]}>
               <Text style={[styles.modalTitleText, { color: t.textMain }, fontBold]}>
                 {tr.aboutTitle}
@@ -1143,8 +1108,6 @@ export default function App() {
                 <Ionicons name="close" size={18} color={t.textSub} />
               </TouchableOpacity>
             </View>
-
-            {/* نشان و نام اپلیکیشن */}
             <View style={styles.modalHero}>
               <LinearGradient
                 colors={t.logoGradients}
@@ -1167,8 +1130,6 @@ export default function App() {
             <Text style={[styles.modalDescText, { color: t.textSub }, fontRegular]}>
               {tr.aboutDesc}
             </Text>
-
-            {/* دکمه بررسی دستی بروزرسانی در مودال */}
             <TouchableOpacity
               style={[
                 styles.modalCheckUpdateBtn,
@@ -1199,8 +1160,6 @@ export default function App() {
             )}
 
             <View style={[styles.modalDivider, { backgroundColor: t.divider }]} />
-
-            {/* کارت سازنده */}
             <View style={[styles.devCard, { backgroundColor: t.cardInner, borderColor: t.inputBorder }]}>
               <View style={[styles.devIconWrap, { backgroundColor: t.primaryBg }]}>
                 <Ionicons name="code-slash" size={17} color={t.primary} />
@@ -1208,8 +1167,6 @@ export default function App() {
               <Text style={[styles.devLabel, { color: t.textMain }, fontBold]}>
                 {tr.devBy}
               </Text>
-
-              {/* دکمه های ارتباطی گیت هاب، تلگرام و ایمیل */}
               <View style={[styles.modalSocialRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
                 <TouchableOpacity
                   style={[
@@ -1269,8 +1226,6 @@ export default function App() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-
-      {/* دیالوگ پاپ آپ نسخه جدید برنامه */}
       <Modal
         visible={isUpdateDialogOpen}
         transparent={true}
@@ -1438,10 +1393,10 @@ const styles = StyleSheet.create({
   },
   fetchRateBtn: {
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
+    gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 10,
     borderWidth: 1,
   },
   fetchRateBtnText: {
@@ -1670,7 +1625,7 @@ const styles = StyleSheet.create({
   },
   histHeaderRightControls: {
     alignItems: 'center',
-    gap: 14, // فاصله امن بیشتر بین دکمه سطل آشغال و دکمه باز و بسته
+    gap: 14,
   },
   trashBtn: {
     width: 30,
@@ -1693,7 +1648,7 @@ const styles = StyleSheet.create({
   },
   histScrollContainer: {
     maxHeight: 180,
-    paddingRight: 10, // ایجاد فاصله ایمن در سمت راست/چپ تا نوار اسکرول روی متن نیفتد
+    paddingRight: 10,
     paddingLeft: 6,
   },
   histRow: {
