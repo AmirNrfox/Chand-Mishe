@@ -668,54 +668,50 @@ export default function App() {
               <TouchableOpacity
                 onPress={fetchLiveRate}
                 disabled={isLoadingRate || cooldownSeconds > 0}
-                activeOpacity={0.8}
-                style={[styles.fetchRateTouchable, (isLoadingRate || cooldownSeconds > 0) && { opacity: 0.75 }]}
+                activeOpacity={0.7}
+                style={[
+                  styles.fetchRatePill,
+                  {
+                    backgroundColor:
+                      cooldownSeconds > 0
+                        ? isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9'
+                        : isDark ? 'rgba(56, 189, 248, 0.12)' : '#EEF2FF',
+                    borderColor:
+                      cooldownSeconds > 0
+                        ? isDark ? 'rgba(255, 255, 255, 0.10)' : '#E2E8F0'
+                        : isDark ? 'rgba(56, 189, 248, 0.35)' : '#C7D2FE',
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                  },
+                ]}
               >
-                <LinearGradient
-                  colors={
-                    isDark
-                      ? ['rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0.04)', 'rgba(56, 189, 248, 0.08)']
-                      : ['rgba(255, 255, 255, 0.95)', 'rgba(235, 242, 254, 0.7)']
-                  }
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                {isLoadingRate ? (
+                  <ActivityIndicator size="small" color={isDark ? '#38BDF8' : '#4F46E5'} />
+                ) : cooldownSeconds > 0 ? (
+                  <Ionicons name="time-outline" size={13} color={t.textMuted} />
+                ) : (
+                  <Ionicons name="sync-outline" size={13} color={isDark ? '#38BDF8' : '#4F46E5'} />
+                )}
+
+                <Text
                   style={[
-                    styles.fetchRateBtn,
+                    styles.fetchRateText,
                     {
-                      borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(203, 213, 225, 0.85)',
-                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                      color:
+                        cooldownSeconds > 0
+                          ? t.textMuted
+                          : isDark
+                          ? '#38BDF8'
+                          : '#4F46E5',
                     },
+                    fontBold,
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.glossyTopLine,
-                      { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.95)' },
-                    ]}
-                  />
-                  {isLoadingRate ? (
-                    <ActivityIndicator size="small" color={isDark ? '#38BDF8' : t.primary} />
-                  ) : (
-                    <Ionicons
-                      name={cooldownSeconds > 0 ? 'time-outline' : 'cloud-download-outline'}
-                      size={14}
-                      color={cooldownSeconds > 0 ? t.textMuted : isDark ? '#38BDF8' : t.primary}
-                    />
-                  )}
-                  <Text
-                    style={[
-                      styles.fetchRateBtnText,
-                      { color: cooldownSeconds > 0 ? t.textMuted : isDark ? '#F0F9FF' : t.primary },
-                      fontSemiBold,
-                    ]}
-                  >
-                    {isLoadingRate
-                      ? tr.fetchingRate
-                      : cooldownSeconds > 0
-                      ? `${cooldownSeconds} ${tr.cooldownWait}`
-                      : tr.fetchLiveRate}
-                  </Text>
-                </LinearGradient>
+                  {isLoadingRate
+                    ? tr.fetchingRate
+                    : cooldownSeconds > 0
+                    ? `${cooldownSeconds} ${tr.cooldownWait}`
+                    : tr.fetchLiveRate}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -1412,33 +1408,15 @@ const styles = StyleSheet.create({
   rateSubInfo: {
     fontSize: 11,
   },
-  fetchRateTouchable: {
-    borderRadius: 12,
-    shadowColor: '#38BDF8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  fetchRateBtn: {
-    position: 'relative',
-    overflow: 'hidden',
+  fetchRatePill: {
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 20,
     borderWidth: 1,
   },
-  glossyTopLine: {
-    position: 'absolute',
-    top: 0,
-    left: '12%',
-    right: '12%',
-    height: 1,
-    borderRadius: 1,
-  },
-  fetchRateBtnText: {
+  fetchRateText: {
     fontSize: 11,
   },
   rateStatusRow: {
