@@ -35,11 +35,12 @@ const translations = {
   fa: {
     appTitle: 'چند میشه؟',
     appSubtitle: 'محاسبه گر قیمت دلار و تومان',
-    rateLabel: 'نرخ ۱ دلار:',
+    rateLabel: 'نرخ ۱ دلار یا تتر:',
     rateUnit: 'تومان',
-    fetchLiveRate: 'دریافت نرخ روز',
+    fetchLiveRate: 'دریافت نرخ تتر',
     fetchingRate: 'در حال دریافت...',
-    rateFetchError: 'خطا در دریافت نرخ آنلاین',
+    rateFetchError: 'خطا در دریافت نرخ تتر',
+    cooldownWait: 'ثانیه صبر',
     inputTag: 'ورودی',
     usdTitle: 'مبلغ به دلار',
     tomanTitle: 'مبلغ به تومان',
@@ -58,11 +59,12 @@ const translations = {
   en: {
     appTitle: 'Chand Mishe?',
     appSubtitle: 'USD & Toman Price Converter',
-    rateLabel: '1 USD Rate:',
+    rateLabel: '1 USD / USDT Rate:',
     rateUnit: 'Toman',
-    fetchLiveRate: 'Get Live Rate',
+    fetchLiveRate: 'Get USDT Rate',
     fetchingRate: 'Fetching...',
-    rateFetchError: 'Failed to fetch live rate',
+    rateFetchError: 'Failed to fetch USDT rate',
+    cooldownWait: 's wait',
     inputTag: 'INPUT',
     usdTitle: 'Amount in USD',
     tomanTitle: 'Amount in Toman',
@@ -159,6 +161,22 @@ const formatWithCommas = (num: number, maxDecimals: number = 2): string => {
   return parts.join('.');
 };
 
+const fetchWithTimeout = async (url: string, timeoutMs: number = 6000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+};
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     VazirRegular: Vazirmatn_400Regular,
@@ -177,6 +195,7 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [isLoadingRate, setIsLoadingRate] = useState<boolean>(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
   const [rateStatusMessage, setRateStatusMessage] = useState<string>('');
   const [rateStatusType, setRateStatusType] = useState<'success' | 'error'>('success');
 
@@ -193,6 +212,14 @@ export default function App() {
   useEffect(() => {
     loadSavedData();
   }, []);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownSeconds]);
 
   const loadSavedData = async () => {
     try {
@@ -248,45 +275,40 @@ export default function App() {
   };
 
   const fetchLiveRate = async () => {
+    if (isLoadingRate || cooldownSeconds > 0) return;
+
     setIsLoadingRate(true);
     setRateStatusMessage('');
     try {
       let price: number | null = null;
-      let source = '';
 
-      // 1. Try Tetherland API
+      // 1. Try Tetherland API (تایم‌اوت ۶ ثانیه برای جلوگیری از فریز)
       try {
-        const response = await fetch('https://api.tetherland.com/currencies', {
-          headers: { Accept: 'application/json' },
-        });
+        const response = await fetchWithTimeout('https://api.tetherland.com/currencies', 6000);
         if (response.ok) {
           const json = await response.json();
           const p = json?.data?.currencies?.USDT?.price;
           if (p && typeof p === 'number' && p > 0) {
             price = p;
-            source = 'Tetherland';
           }
         }
       } catch (e) {
-        console.log('Tetherland fetch error:', e);
+        console.log('Tetherland fetch error / timeout:', e);
       }
 
-      // 2. Fallback to Wallex API if Tetherland failed
+      // 2. Fallback to Wallex API if Tetherland failed (تایم‌اوت ۶ ثانیه)
       if (!price) {
         try {
-          const response = await fetch('https://api.wallex.ir/v1/markets', {
-            headers: { Accept: 'application/json' },
-          });
+          const response = await fetchWithTimeout('https://api.wallex.ir/v1/markets', 6000);
           if (response.ok) {
             const json = await response.json();
             const p = parseFloat(json?.result?.symbols?.USDTTMN?.stats?.lastPrice);
             if (!isNaN(p) && p > 0) {
               price = Math.round(p);
-              source = 'Wallex';
             }
           }
         } catch (e) {
-          console.log('Wallex fetch error:', e);
+          console.log('Wallex fetch error / timeout:', e);
         }
       }
 
@@ -294,21 +316,24 @@ export default function App() {
         const priceStr = price.toString();
         await handleRateChange(priceStr);
         setRateStatusType('success');
+        setCooldownSeconds(30); // تایم‌اوت ۳۰ ثانیه‌ای بین هر درخواست جهت جلوگیری از بلاک شدن آی‌پی
         const timeStr = new Date().toLocaleTimeString(lang === 'fa' ? 'fa-IR' : 'en-US', {
           hour: '2-digit',
           minute: '2-digit',
         });
         setRateStatusMessage(
           lang === 'fa'
-            ? `بروزرسانی آنلاین (${source}) در ${timeStr}`
-            : `Live updated (${source}) at ${timeStr}`
+            ? `بروزرسانی آنلاین (نرخ تتر) در ${timeStr}`
+            : `Live updated (USDT rate) at ${timeStr}`
         );
       } else {
         setRateStatusType('error');
+        setCooldownSeconds(10); // تایم‌اوت ۱۰ ثانیه در صورت خطا
         setRateStatusMessage(tr.rateFetchError);
       }
     } catch (err) {
       setRateStatusType('error');
+      setCooldownSeconds(10);
       setRateStatusMessage(tr.rateFetchError);
     } finally {
       setIsLoadingRate(false);
@@ -498,23 +523,37 @@ export default function App() {
                 style={[
                   styles.fetchRateBtn,
                   {
-                    backgroundColor: t.primaryBg,
-                    borderColor: t.primary,
+                    backgroundColor: cooldownSeconds > 0 ? t.chipBg : t.primaryBg,
+                    borderColor: cooldownSeconds > 0 ? t.chipBorder : t.primary,
                     flexDirection: isRTL ? 'row-reverse' : 'row',
                   },
-                  isLoadingRate && { opacity: 0.7 },
+                  (isLoadingRate || cooldownSeconds > 0) && { opacity: 0.8 },
                 ]}
                 onPress={fetchLiveRate}
-                disabled={isLoadingRate}
+                disabled={isLoadingRate || cooldownSeconds > 0}
                 activeOpacity={0.7}
               >
                 {isLoadingRate ? (
                   <ActivityIndicator size="small" color={t.primary} />
                 ) : (
-                  <Ionicons name="cloud-download-outline" size={14} color={t.primary} />
+                  <Ionicons
+                    name={cooldownSeconds > 0 ? 'time-outline' : 'cloud-download-outline'}
+                    size={14}
+                    color={cooldownSeconds > 0 ? t.textMuted : t.primary}
+                  />
                 )}
-                <Text style={[styles.fetchRateBtnText, { color: t.primary }, fontSemiBold]}>
-                  {isLoadingRate ? tr.fetchingRate : tr.fetchLiveRate}
+                <Text
+                  style={[
+                    styles.fetchRateBtnText,
+                    { color: cooldownSeconds > 0 ? t.textMuted : t.primary },
+                    fontSemiBold,
+                  ]}
+                >
+                  {isLoadingRate
+                    ? tr.fetchingRate
+                    : cooldownSeconds > 0
+                    ? `${cooldownSeconds} ${tr.cooldownWait}`
+                    : tr.fetchLiveRate}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -530,7 +569,9 @@ export default function App() {
               ]}
             >
               <View style={[styles.rateBadge, { backgroundColor: t.primaryBg }]}>
-                <Text style={[styles.rateBadgeText, { color: t.primary }, fontBold]}>$ 1</Text>
+                <Text style={[styles.rateBadgeText, { color: t.primary }, fontBold]}>
+                  {isRTL ? '$ ۱ / تتر' : '$ 1 / USDT'}
+                </Text>
               </View>
 
               <Text style={[styles.rateEqualsSign, { color: t.textMuted }, fontBold]}>=</Text>
