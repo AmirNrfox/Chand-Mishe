@@ -2,7 +2,7 @@
   "expo": {
     "name": "چند میشه",
     "slug": "chand-mishe",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -10,14 +10,17 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.chandmishe.app",
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#1A253B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.chandmishe.app",
-      "versionCode": 2
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
 import {
   StyleSheet,
   Text,
@@ -31,7 +33,7 @@ const THEME_STORAGE_KEY = '@chand_mishe_theme';
 const LANG_STORAGE_KEY = '@chand_mishe_lang';
 const HISTORY_STORAGE_KEY = '@chand_mishe_history';
 
-const CURRENT_APP_VERSION = '1.0.1';
+const CURRENT_APP_VERSION = '1.0.2';
 const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/AmirNrfox/Chand-Mishe/main/version.json';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/AmirNrfox/Chand-Mishe/releases/latest';
 
@@ -41,6 +43,7 @@ type UpdateInfo = {
   version: string;
   releaseNotes: string;
   downloadUrl: string;
+  directApkUrl?: string;
 };
 
 const translations = {
@@ -64,7 +67,7 @@ const translations = {
     historyTitle: 'آخرین محاسبات:',
     symbolToman: 'ت',
     usdUnit: 'دلار',
-    appVersion: 'نسخه ۱.۰.۱',
+    appVersion: 'نسخه ۱.۰.۲',
     aboutTitle: 'درباره برنامه',
     aboutDesc: 'ابزاری سبک و سریع برای محاسبه قیمت خرید های دلاری شما به تومان یا بالعکس بر اساس نرخ آنلاین یا دستی',
     devBy: 'طراحی و توسعه توسط امیرعلی نظری',
@@ -80,8 +83,15 @@ const translations = {
     updateDialogTitle: 'نسخه جدید موجود است!',
     updateAvailableDesc: 'نسخه جدیدی از برنامه منتشر شده است. آیا مایلید آن را دانلود و نصب کنید؟',
     updateNotesLabel: 'تغییرات نسخه جدید:',
-    downloadUpdateBtn: 'دانلود و نصب نسخه جدید',
-    updateLaterBtn: 'بعدا',
+    downloadUpdateBtn: 'دانلود و نصب مستقیم',
+    downloadingUpdate: 'در حال دانلود فایل نصب...',
+    downloadCompleteMsg: 'فایل نصب با موفقیت دانلود شد. برای شروع، روی دکمه نصب ضربه بزنید.',
+    installUpdateBtn: 'نصب نسخه جدید',
+    downloadViaBrowserBtn: 'دانلود از طریق مرورگر',
+    downloadFailedMsg: 'خطا در دانلود خودکار. می‌توانید فایل را مستقیم از مرورگر دانلود کنید.',
+    cancelDownload: 'انصراف',
+    retryDownload: 'تلاش مجدد',
+    updateLaterBtn: 'بعداً',
     newVersionBadge: 'جدید',
   },
   en: {
@@ -104,7 +114,7 @@ const translations = {
     historyTitle: 'Recent Conversions:',
     symbolToman: 'TM',
     usdUnit: 'USD',
-    appVersion: 'Version 1.0.1',
+    appVersion: 'Version 1.0.2',
     aboutTitle: 'About App',
     aboutDesc: 'A lightweight and fast tool to calculate your USD purchase prices in Toman or vice versa based on live or custom rates',
     devBy: 'Designed and Developed by AmirAli Nazari',
@@ -121,6 +131,13 @@ const translations = {
     updateAvailableDesc: 'A newer version of Chand Mishe is available. Would you like to download and install it?',
     updateNotesLabel: 'Release Notes:',
     downloadUpdateBtn: 'Download & Install',
+    downloadingUpdate: 'Downloading update file...',
+    downloadCompleteMsg: 'Download complete! Tap Install to continue.',
+    installUpdateBtn: 'Install Update Now',
+    downloadViaBrowserBtn: 'Download via Browser',
+    downloadFailedMsg: 'Direct download failed. You can download via your browser.',
+    cancelDownload: 'Cancel',
+    retryDownload: 'Retry',
     updateLaterBtn: 'Later',
     newVersionBadge: 'NEW',
   },
@@ -234,6 +251,20 @@ const isNewerVersion = (latest: string, current: string): boolean => {
   return false;
 };
 
+const toFaDigits = (str: string | number): string => {
+  return String(str).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d, 10)]);
+};
+
+const getTargetArch = (): string => {
+  if (Platform.OS !== 'android') return 'universal';
+  try {
+    const abis: string[] = (Platform.constants as any)?.SupportedABIs || [];
+    if (abis.some((a) => a.includes('arm64'))) return 'arm64-v8a';
+    if (abis.some((a) => a.includes('v7a') || a.includes('armeabi'))) return 'armeabi-v7a';
+  } catch (e) {}
+  return 'arm64-v8a';
+};
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     VazirRegular: Vazirmatn_400Regular,
@@ -261,6 +292,13 @@ export default function App() {
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState<boolean>(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
   const [updateStatusFeedback, setUpdateStatusFeedback] = useState<string>('');
+
+  const [downloadState, setDownloadState] = useState<'idle' | 'downloading' | 'completed' | 'error'>('idle');
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [downloadedSizeStr, setDownloadedSizeStr] = useState<string>('0 MB');
+  const [totalSizeStr, setTotalSizeStr] = useState<string>('13.8 MB');
+  const [downloadedApkUri, setDownloadedApkUri] = useState<string | null>(null);
+  const downloadResumableRef = useRef<FileSystem.DownloadResumable | null>(null);
 
   const t = isDark ? themes.dark : themes.light;
   const tr = translations[lang];
@@ -458,11 +496,17 @@ export default function App() {
       }
 
       if (remoteVersion && isNewerVersion(remoteVersion, CURRENT_APP_VERSION)) {
+        const vClean = remoteVersion.replace(/^v/, '');
+        const targetArch = getTargetArch();
+        const directApk = `https://github.com/AmirNrfox/Chand-Mishe/releases/download/v${vClean}/Chand-Mishe-v${vClean}-${targetArch}.apk`;
         setUpdateInfo({
           version: remoteVersion,
           releaseNotes: notes,
-          downloadUrl: downloadUrl,
+          downloadUrl: downloadUrl || `https://github.com/AmirNrfox/Chand-Mishe/releases/tag/v${vClean}`,
+          directApkUrl: directApk,
         });
+        setDownloadState('idle');
+        setDownloadProgress(0);
         setIsUpdateDialogOpen(true);
         if (manual) setUpdateStatusFeedback('');
       } else {
@@ -479,6 +523,112 @@ export default function App() {
         setIsCheckingUpdate(false);
       }
     }
+  };
+
+  const handleStartDownloadOrInstall = async () => {
+    if (downloadState === 'completed' && downloadedApkUri) {
+      await installApk(downloadedApkUri);
+      return;
+    }
+
+    if (Platform.OS !== 'android') {
+      if (updateInfo?.downloadUrl) {
+        Linking.openURL(updateInfo.downloadUrl);
+      }
+      return;
+    }
+
+    const targetVersion = updateInfo?.version || '';
+    const targetArch = getTargetArch();
+    const directUrl =
+      updateInfo?.directApkUrl ||
+      `https://github.com/AmirNrfox/Chand-Mishe/releases/download/v${targetVersion}/Chand-Mishe-v${targetVersion}-${targetArch}.apk`;
+    const localFileUri = `${FileSystem.cacheDirectory}Chand-Mishe-v${targetVersion}-${targetArch}.apk`;
+
+    try {
+      const existing = await FileSystem.getInfoAsync(localFileUri);
+      if (existing.exists && existing.size && existing.size > 10 * 1024 * 1024) {
+        setDownloadedApkUri(localFileUri);
+        setDownloadState('completed');
+        await installApk(localFileUri);
+        return;
+      }
+
+      setDownloadState('downloading');
+      setDownloadProgress(0);
+      setDownloadedSizeStr('0 MB');
+      setTotalSizeStr(targetArch === 'universal' ? '18.8 MB' : '13.8 MB');
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        directUrl,
+        localFileUri,
+        {},
+        (progressData) => {
+          const total = progressData.totalBytesExpectedToWrite;
+          const written = progressData.totalBytesWritten;
+          if (total > 0) {
+            const ratio = written / total;
+            setDownloadProgress(Math.min(1, Math.max(0, ratio)));
+            setDownloadedSizeStr(`${(written / (1024 * 1024)).toFixed(1)} MB`);
+            setTotalSizeStr(`${(total / (1024 * 1024)).toFixed(1)} MB`);
+          } else {
+            setDownloadedSizeStr(`${(written / (1024 * 1024)).toFixed(1)} MB`);
+          }
+        }
+      );
+      downloadResumableRef.current = downloadResumable;
+
+      const downloadResult = await downloadResumable.downloadAsync();
+      if (downloadResult && downloadResult.uri) {
+        setDownloadedApkUri(downloadResult.uri);
+        setDownloadState('completed');
+        setDownloadProgress(1);
+        await installApk(downloadResult.uri);
+      } else {
+        setDownloadState('error');
+      }
+    } catch (err) {
+      console.log('In-app download error:', err);
+      setDownloadState('error');
+    }
+  };
+
+  const installApk = async (apkFileUri: string) => {
+    if (Platform.OS !== 'android') {
+      if (updateInfo?.downloadUrl) {
+        Linking.openURL(updateInfo.downloadUrl);
+      }
+      return;
+    }
+    try {
+      const contentUri = await FileSystem.getContentUriAsync(apkFileUri);
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        flags: 268435457,
+        type: 'application/vnd.android.package-archive',
+      });
+    } catch (error) {
+      console.log('Failed to start package installer intent:', error);
+      if (updateInfo?.downloadUrl) {
+        Linking.openURL(updateInfo.downloadUrl);
+      }
+    }
+  };
+
+  const handleCancelDownload = async () => {
+    if (downloadResumableRef.current) {
+      try {
+        await downloadResumableRef.current.cancelAsync();
+      } catch (e) {}
+      downloadResumableRef.current = null;
+    }
+    setDownloadState('idle');
+    setDownloadProgress(0);
+  };
+
+  const handleCloseUpdateDialog = () => {
+    handleCancelDownload();
+    setIsUpdateDialogOpen(false);
   };
 
   const historyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1330,7 +1480,7 @@ export default function App() {
         visible={isUpdateDialogOpen}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setIsUpdateDialogOpen(false)}
+        onRequestClose={handleCloseUpdateDialog}
       >
         <View style={styles.modalOverlay}>
           <View
@@ -1339,61 +1489,306 @@ export default function App() {
               { backgroundColor: t.card, borderColor: t.cardBorder },
             ]}
           >
-            <View style={[styles.updateHeroRow, { flexDirection }]}>
+            {/* Header */}
+            <View style={[styles.updateHeroRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
               <View style={[styles.updateIconBadge, { backgroundColor: 'rgba(52, 211, 153, 0.16)' }]}>
                 <Ionicons name="sparkles" size={24} color="#34D399" />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.updateDialogTitle, { color: t.textMain }, fontBold]}>
+              <View style={[styles.updateTitleWrap, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+                <Text
+                  style={[
+                    styles.updateDialogTitle,
+                    {
+                      color: t.textMain,
+                      textAlign: isRTL ? 'right' : 'left',
+                      writingDirection: isRTL ? 'rtl' : 'ltr',
+                    },
+                    fontBold,
+                  ]}
+                >
                   {tr.updateDialogTitle}
                 </Text>
-                <Text style={[styles.updateVersionSubtitle, { color: t.primary }, fontSemiBold]}>
+                <Text
+                  style={[
+                    styles.updateVersionSubtitle,
+                    {
+                      color: t.primary,
+                      textAlign: isRTL ? 'right' : 'left',
+                      writingDirection: isRTL ? 'rtl' : 'ltr',
+                    },
+                    fontSemiBold,
+                  ]}
+                >
                   v{updateInfo?.version || ''} ({tr.newVersionBadge})
                 </Text>
               </View>
             </View>
 
-            <Text style={[styles.updateDialogDesc, { color: t.textSub }, fontRegular]}>
+            {/* Description */}
+            <Text
+              style={[
+                styles.updateDialogDesc,
+                {
+                  color: t.textSub,
+                  textAlign: isRTL ? 'right' : 'left',
+                  writingDirection: isRTL ? 'rtl' : 'ltr',
+                },
+                fontRegular,
+              ]}
+            >
               {tr.updateAvailableDesc}
             </Text>
 
+            {/* Release Notes */}
             {updateInfo?.releaseNotes ? (
-              <View style={[styles.releaseNotesBox, { backgroundColor: t.cardInner, borderColor: t.inputBorder }]}>
-                <Text style={[styles.releaseNotesTitle, { color: t.textMuted }, fontSemiBold]}>
+              <View
+                style={[
+                  styles.releaseNotesBox,
+                  { backgroundColor: t.cardInner, borderColor: t.inputBorder },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.releaseNotesTitle,
+                    {
+                      color: t.textMuted,
+                      textAlign: isRTL ? 'right' : 'left',
+                      writingDirection: isRTL ? 'rtl' : 'ltr',
+                    },
+                    fontSemiBold,
+                  ]}
+                >
                   {tr.updateNotesLabel}
                 </Text>
-                <Text style={[styles.releaseNotesContent, { color: t.textMain }, fontRegular]}>
+                <Text
+                  style={[
+                    styles.releaseNotesContent,
+                    {
+                      color: t.textMain,
+                      textAlign: isRTL ? 'right' : 'left',
+                      writingDirection: isRTL ? 'rtl' : 'ltr',
+                    },
+                    fontRegular,
+                  ]}
+                >
                   {updateInfo.releaseNotes}
                 </Text>
               </View>
             ) : null}
 
-            <View style={styles.updateActionsCol}>
-              <TouchableOpacity
-                style={[styles.downloadUpdateBtn, { backgroundColor: t.primary }]}
-                activeOpacity={0.8}
-                onPress={() => {
-                  if (updateInfo?.downloadUrl) {
-                    Linking.openURL(updateInfo.downloadUrl);
-                  }
-                  setIsUpdateDialogOpen(false);
-                }}
-              >
-                <Ionicons name="cloud-download" size={18} color="#FFFFFF" />
-                <Text style={[styles.downloadUpdateBtnText, fontBold]}>
-                  {tr.downloadUpdateBtn}
-                </Text>
-              </TouchableOpacity>
+            {/* In-App Download Progress Container */}
+            {downloadState === 'downloading' && (
+              <View style={[styles.downloadProgressCard, { backgroundColor: t.cardInner, borderColor: t.inputBorder }]}>
+                <View style={[styles.downloadProgressHeaderRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                  <Text style={[styles.downloadingStatusText, { color: t.textMain }, fontSemiBold]}>
+                    {tr.downloadingUpdate}
+                  </Text>
+                  <Text style={[styles.downloadPercentText, { color: t.primary }, fontBold]}>
+                    {isRTL ? `${toFaDigits(Math.round(downloadProgress * 100))}٪` : `${Math.round(downloadProgress * 100)}%`}
+                  </Text>
+                </View>
 
-              <TouchableOpacity
-                style={[styles.updateLaterBtn, { borderColor: t.chipBorder }]}
-                activeOpacity={0.7}
-                onPress={() => setIsUpdateDialogOpen(false)}
+                {/* Progress Bar Track */}
+                <View style={[styles.progressBarTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#E2E8F0' }]}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        backgroundColor: t.primary,
+                        width: `${Math.round(downloadProgress * 100)}%`,
+                        alignSelf: isRTL ? 'flex-end' : 'flex-start',
+                      },
+                    ]}
+                  />
+                </View>
+
+                {/* Size stats & Cancel */}
+                <View style={[styles.downloadSizeRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                  <Text style={[styles.downloadSizeText, { color: t.textMuted }, fontRegular]}>
+                    {downloadedSizeStr} / {totalSizeStr}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handleCancelDownload}
+                    activeOpacity={0.7}
+                    style={styles.cancelDownloadBtn}
+                  >
+                    <Text style={[styles.cancelDownloadText, { color: '#EF4444' }, fontSemiBold]}>
+                      {tr.cancelDownload}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Completed state notice */}
+            {downloadState === 'completed' && (
+              <View
+                style={[
+                  styles.downloadCompleteCard,
+                  {
+                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                    borderColor: 'rgba(16, 185, 129, 0.3)',
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                  },
+                ]}
               >
-                <Text style={[styles.updateLaterBtnText, { color: t.textMuted }, fontRegular]}>
-                  {tr.updateLaterBtn}
+                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                <Text
+                  style={[
+                    styles.downloadCompleteText,
+                    {
+                      color: '#10B981',
+                      textAlign: isRTL ? 'right' : 'left',
+                      writingDirection: isRTL ? 'rtl' : 'ltr',
+                    },
+                    fontRegular,
+                  ]}
+                >
+                  {tr.downloadCompleteMsg}
                 </Text>
-              </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Error state notice */}
+            {downloadState === 'error' && (
+              <View
+                style={[
+                  styles.downloadErrorCard,
+                  {
+                    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                    borderColor: 'rgba(239, 68, 68, 0.3)',
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                  },
+                ]}
+              >
+                <Ionicons name="alert-circle" size={20} color="#EF4444" />
+                <Text
+                  style={[
+                    styles.downloadErrorText,
+                    {
+                      color: '#EF4444',
+                      textAlign: isRTL ? 'right' : 'left',
+                      writingDirection: isRTL ? 'rtl' : 'ltr',
+                    },
+                    fontRegular,
+                  ]}
+                >
+                  {tr.downloadFailedMsg}
+                </Text>
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.updateActionsCol}>
+              {downloadState === 'idle' && (
+                <>
+                  <TouchableOpacity
+                    style={[
+                      styles.downloadUpdateBtn,
+                      {
+                        backgroundColor: t.primary,
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={handleStartDownloadOrInstall}
+                  >
+                    <Ionicons name="cloud-download" size={18} color="#FFFFFF" />
+                    <Text style={[styles.downloadUpdateBtnText, fontBold]}>
+                      {tr.downloadUpdateBtn}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.updateLaterBtn, { borderColor: t.chipBorder }]}
+                    activeOpacity={0.7}
+                    onPress={handleCloseUpdateDialog}
+                  >
+                    <Text style={[styles.updateLaterBtnText, { color: t.textMuted }, fontRegular]}>
+                      {tr.updateLaterBtn}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {downloadState === 'downloading' && (
+                <TouchableOpacity
+                  style={[styles.updateLaterBtn, { borderColor: t.chipBorder }]}
+                  activeOpacity={0.7}
+                  onPress={handleCloseUpdateDialog}
+                >
+                  <Text style={[styles.updateLaterBtnText, { color: t.textMuted }, fontRegular]}>
+                    {tr.updateLaterBtn}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {downloadState === 'completed' && (
+                <>
+                  <TouchableOpacity
+                    style={[
+                      styles.downloadUpdateBtn,
+                      {
+                        backgroundColor: '#10B981',
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => downloadedApkUri && installApk(downloadedApkUri)}
+                  >
+                    <Ionicons name="arrow-redo-circle" size={20} color="#FFFFFF" />
+                    <Text style={[styles.downloadUpdateBtnText, fontBold]}>
+                      {tr.installUpdateBtn}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.updateLaterBtn, { borderColor: t.chipBorder }]}
+                    activeOpacity={0.7}
+                    onPress={handleCloseUpdateDialog}
+                  >
+                    <Text style={[styles.updateLaterBtnText, { color: t.textMuted }, fontRegular]}>
+                      {tr.closeModal}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {downloadState === 'error' && (
+                <>
+                  <TouchableOpacity
+                    style={[
+                      styles.downloadUpdateBtn,
+                      {
+                        backgroundColor: t.primary,
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (updateInfo?.downloadUrl) {
+                        Linking.openURL(updateInfo.downloadUrl);
+                      }
+                      handleCloseUpdateDialog();
+                    }}
+                  >
+                    <Ionicons name="open-outline" size={18} color="#FFFFFF" />
+                    <Text style={[styles.downloadUpdateBtnText, fontBold]}>
+                      {tr.downloadViaBrowserBtn}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.updateLaterBtn, { borderColor: t.chipBorder }]}
+                    activeOpacity={0.7}
+                    onPress={handleStartDownloadOrInstall}
+                  >
+                    <Text style={[styles.updateLaterBtnText, { color: t.primary }, fontSemiBold]}>
+                      {tr.retryDownload}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         </View>
@@ -1934,6 +2329,9 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  updateTitleWrap: {
+    flex: 1,
+  },
   updateIconBadge: {
     width: 46,
     height: 46,
@@ -1967,11 +2365,78 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  downloadProgressCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 14,
+  },
+  downloadProgressHeaderRow: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  downloadingStatusText: {
+    fontSize: 12,
+  },
+  downloadPercentText: {
+    fontSize: 13,
+  },
+  progressBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+    width: '100%',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  downloadSizeRow: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  downloadSizeText: {
+    fontSize: 11,
+  },
+  cancelDownloadBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  cancelDownloadText: {
+    fontSize: 12,
+  },
+  downloadCompleteCard: {
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  downloadCompleteText: {
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 18,
+  },
+  downloadErrorCard: {
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  downloadErrorText: {
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 18,
+  },
   updateActionsCol: {
     gap: 8,
   },
   downloadUpdateBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,

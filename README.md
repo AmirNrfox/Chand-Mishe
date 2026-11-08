@@ -56,9 +56,9 @@
 
 1. وارد بخش [Releases گیت‌هاب](https://github.com/AmirNrfox/Chand-Mishe/releases) شو.
 2. نسخه مناسب گوشیت رو انتخاب و نصب کن:
-   * ⚡ **`Chand-Mishe-v1.0.1-arm64-v8a.apk`** *(پیشنهادی)*: مخصوص پردازنده‌های ۶۴ بیتی (شامل ۹۹٪ گوشی‌های جدید مثل سامسونگ، شیائومی، پوکو، پیکسل و...). این نسخه کمترین حجم (~۱۳ مگابایت) و بالاترین سرعت رو داره.
-   * 📱 **`Chand-Mishe-v1.0.1-armeabi-v7a.apk`**: مخصوص گوشی‌های قدیمی‌تر ۳۲ بیتی.
-   * 🌐 **`Chand-Mishe-v1.0.1-universal.apk`**: نسخه همگانی که فایل‌های تمام معماری‌ها رو داخل خودش داره و روی هر دستگاه اندرویدی نصب میشه.
+   * ⚡ **`Chand-Mishe-v1.0.2-arm64-v8a.apk`** *(پیشنهادی)*: مخصوص پردازنده‌های ۶۴ بیتی (شامل ۹۹٪ گوشی‌های جدید مثل سامسونگ، شیائومی، پوکو، پیکسل و...). این نسخه کمترین حجم (~۱۳ مگابایت) و بالاترین سرعت رو داره.
+   * 📱 **`Chand-Mishe-v1.0.2-armeabi-v7a.apk`**: مخصوص گوشی‌های قدیمی‌تر ۳۲ بیتی.
+   * 🌐 **`Chand-Mishe-v1.0.2-universal.apk`**: نسخه همگانی که فایل‌های تمام معماری‌ها رو داخل خودش داره و روی هر دستگاه اندرویدی نصب میشه.
 
 ---
 
@@ -116,9 +116,9 @@ Pre-compiled, installable Android APKs are available on the GitHub Releases page
 
 1. Go to [GitHub Releases](https://github.com/AmirNrfox/Chand-Mishe/releases).
 2. Choose the download that fits your device:
-   * ⚡ **`Chand-Mishe-v1.0.1-arm64-v8a.apk`** *(Recommended)*: For modern 64-bit devices (99% of Android phones: Samsung, Xiaomi, POCO, Pixel, OnePlus, etc.). Smallest file size (~13 MB) and fastest execution.
-   * 📱 **`Chand-Mishe-v1.0.1-armeabi-v7a.apk`**: For older 32-bit Android phones.
-   * 🌐 **`Chand-Mishe-v1.0.1-universal.apk`**: Universal build containing all architectures (runs on any Android device).
+   * ⚡ **`Chand-Mishe-v1.0.2-arm64-v8a.apk`** *(Recommended)*: For modern 64-bit devices (99% of Android phones: Samsung, Xiaomi, POCO, Pixel, OnePlus, etc.). Smallest file size (~13 MB) and fastest execution.
+   * 📱 **`Chand-Mishe-v1.0.2-armeabi-v7a.apk`**: For older 32-bit Android phones.
+   * 🌐 **`Chand-Mishe-v1.0.2-universal.apk`**: Universal build containing all architectures (runs on any Android device).
 3. Open the downloaded APK on your device and tap **Install**.
 
 ---

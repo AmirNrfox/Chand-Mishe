@@ -1,7 +1,7 @@
 {
-  "version": "1.0.1",
-  "versionCode": 2,
-  "releaseNotes": "آیکون رسمی جدید (مونوگرام سه‌بعدی «چ» با سکه‌های دلار، تتر و تومان)، رفع باگ ذخیره چندباره در تاریخچه، خالی کردن نرخ پیش‌فرض و بهینه‌سازی فرم نرخ.",
-  "releaseNotesEn": "Brand new 3D app icon (Persian \"Che\" with Dollar, Tether, and Toman coins), resolved calculation history debounce spam, removed default rate value.",
+  "version": "1.0.2",
+  "versionCode": 3,
+  "releaseNotes": "اصلاح چیدمان و راست‌چین کامل مودال بروزرسانی در زبان فارسی، اضافه شدن قابلیت دانلود مستقیم درون‌برنامه‌ای با نمایش نوار پیشرفت و اجرای خودکار نصب فایل APK.",
+  "releaseNotesEn": "Fixed RTL layout for update dialog, added in-app direct APK downloader with real-time progress bar, and automatic package installer trigger.",
   "downloadUrl": "https://github.com/AmirNrfox/Chand-Mishe/releases/latest"
 }
