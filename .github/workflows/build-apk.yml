@@ -48,10 +48,9 @@ jobs:
           VERSION="${GITHUB_REF_NAME:-v1.0.1}"
           echo "Building APKs for release version: ${VERSION}"
 
-          echo "Pre-fetching Gradle distribution to bypass services.gradle.org timeouts..."
-          curl -fL --retry 5 --retry-delay 3 -A "Mozilla/5.0" \
-            -o /tmp/gradle-9.4.1-bin.zip \
-            "https://github.com/gradle/gradle-distributions/releases/download/v9.4.1/gradle-9.4.1-bin.zip"
+          echo "Pre-fetching Gradle distribution to bypass services.gradle.org 504 timeouts..."
+          curl -fL --retry 3 --retry-delay 2 -o /tmp/gradle-9.4.1-bin.zip "https://mirrors.cloud.tencent.com/gradle/gradle-9.4.1-bin.zip" || \
+          curl -fL --retry 3 --retry-delay 2 -o /tmp/gradle-9.4.1-bin.zip "https://repo.huaweicloud.com/gradle/gradle-9.4.1-bin.zip"
           sed -i 's|distributionUrl=.*|distributionUrl=file\\:///tmp/gradle-9.4.1-bin.zip|' gradle/wrapper/gradle-wrapper.properties
           cat gradle/wrapper/gradle-wrapper.properties
 
