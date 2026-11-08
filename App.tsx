@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -31,7 +31,7 @@ const THEME_STORAGE_KEY = '@chand_mishe_theme';
 const LANG_STORAGE_KEY = '@chand_mishe_lang';
 const HISTORY_STORAGE_KEY = '@chand_mishe_history';
 
-const CURRENT_APP_VERSION = '1.0.0';
+const CURRENT_APP_VERSION = '1.0.1';
 const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/AmirNrfox/Chand-Mishe/main/version.json';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/AmirNrfox/Chand-Mishe/releases/latest';
 
@@ -64,7 +64,7 @@ const translations = {
     historyTitle: 'آخرین محاسبات:',
     symbolToman: 'ت',
     usdUnit: 'دلار',
-    appVersion: 'نسخه ۱.۰.۰',
+    appVersion: 'نسخه ۱.۰.۱',
     aboutTitle: 'درباره برنامه',
     aboutDesc: 'ابزاری سبک و سریع برای محاسبه قیمت خرید های دلاری شما به تومان یا بالعکس بر اساس نرخ آنلاین یا دستی',
     devBy: 'طراحی و توسعه توسط امیرعلی نظری',
@@ -104,7 +104,7 @@ const translations = {
     historyTitle: 'Recent Conversions:',
     symbolToman: 'TM',
     usdUnit: 'USD',
-    appVersion: 'Version 1.0.0',
+    appVersion: 'Version 1.0.1',
     aboutTitle: 'About App',
     aboutDesc: 'A lightweight and fast tool to calculate your USD purchase prices in Toman or vice versa based on live or custom rates',
     devBy: 'Designed and Developed by AmirAli Nazari',
@@ -244,7 +244,7 @@ export default function App() {
 
   const [isDark, setIsDark] = useState<boolean>(true);
   const [lang, setLang] = useState<Language>('fa');
-  const [rateText, setRateText] = useState<string>('200,000');
+  const [rateText, setRateText] = useState<string>('');
   const [usdInput, setUsdInput] = useState<string>('');
   const [tomanInput, setTomanInput] = useState<string>('');
   const [direction, setDirection] = useState<'USD_TO_TOMAN' | 'TOMAN_TO_USD'>('USD_TO_TOMAN');
@@ -327,14 +327,24 @@ export default function App() {
     const raw = cleanDigits(val).replace(/[^0-9]/g, '');
     const formatted = formatIntegerWithCommas(raw);
     setRateText(formatted);
-    if (raw) await AsyncStorage.setItem(RATE_STORAGE_KEY, raw);
+    if (raw) {
+      await AsyncStorage.setItem(RATE_STORAGE_KEY, raw);
+    } else {
+      await AsyncStorage.removeItem(RATE_STORAGE_KEY);
+    }
 
     const r = parseFloat(raw);
     if (!isNaN(r) && r > 0) {
       if (direction === 'USD_TO_TOMAN' && usdInput) {
-        calcFromUsd(usdInput, r);
+        calcFromUsd(usdInput, r, false);
       } else if (direction === 'TOMAN_TO_USD' && tomanInput) {
-        calcFromToman(tomanInput, r);
+        calcFromToman(tomanInput, r, false);
+      }
+    } else {
+      if (direction === 'USD_TO_TOMAN') {
+        setTomanInput('');
+      } else {
+        setUsdInput('');
       }
     }
   };
@@ -471,7 +481,65 @@ export default function App() {
     }
   };
 
-  const calcFromUsd = (val: string, customRate?: number) => {
+  const historyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const commitSaveHistory = (usd: string, toman: string) => {
+    if (historyDebounceRef.current) {
+      clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
+
+    const cleanUsd = cleanDigits(usd).trim();
+    const cleanToman = cleanDigits(toman).replace(/,/g, '').trim();
+
+    if (!cleanUsd || !cleanToman || cleanUsd.endsWith('.')) return;
+
+    const numUsd = parseFloat(cleanUsd);
+    const numToman = parseFloat(cleanToman);
+
+    if (isNaN(numUsd) || numUsd <= 0 || isNaN(numToman) || numToman <= 0) return;
+
+    const formattedToman = formatWithCommas(numToman, 2);
+    const item = { id: Date.now().toString(), usd: cleanUsd, toman: formattedToman };
+
+    setHistory((prev) => {
+      const filtered = prev.filter((i) => {
+        const prevUsd = parseFloat(cleanDigits(i.usd));
+        return Math.abs(prevUsd - numUsd) > 0.000001 && i.usd !== cleanUsd;
+      }).slice(0, 29);
+      const updated = [item, ...filtered];
+      AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const scheduleSaveHistory = (usd: string, toman: string) => {
+    if (historyDebounceRef.current) {
+      clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
+
+    const cleanUsd = cleanDigits(usd).trim();
+    const cleanToman = cleanDigits(toman).replace(/,/g, '').trim();
+
+    if (
+      !cleanUsd ||
+      !cleanToman ||
+      cleanUsd.endsWith('.') ||
+      isNaN(parseFloat(cleanUsd)) ||
+      parseFloat(cleanUsd) <= 0 ||
+      isNaN(parseFloat(cleanToman)) ||
+      parseFloat(cleanToman) <= 0
+    ) {
+      return;
+    }
+
+    historyDebounceRef.current = setTimeout(() => {
+      commitSaveHistory(cleanUsd, cleanToman);
+    }, 1000);
+  };
+
+  const calcFromUsd = (val: string, customRate?: number, save: boolean = true) => {
     const clean = cleanDigits(val);
     const rate = customRate || getRateNumber();
 
@@ -485,7 +553,9 @@ export default function App() {
       const toman = usd * rate;
       const res = formatWithCommas(toman, 2);
       setTomanInput(res);
-      saveHistory(clean, res);
+      if (save) {
+        scheduleSaveHistory(clean, res);
+      }
     } else {
       setTomanInput('');
     }
@@ -505,7 +575,7 @@ export default function App() {
     calcFromUsd(val);
   };
 
-  const calcFromToman = (val: string, customRate?: number) => {
+  const calcFromToman = (val: string, customRate?: number, save: boolean = true) => {
     const clean = cleanDigits(val);
     const rate = customRate || getRateNumber();
 
@@ -519,7 +589,9 @@ export default function App() {
       const usd = toman / rate;
       const res = usd < 1 ? usd.toFixed(4).replace(/\.?0+$/, '') : usd.toFixed(2);
       setUsdInput(res);
-      saveHistory(res, formatIntegerWithCommas(clean));
+      if (save) {
+        scheduleSaveHistory(res, formatIntegerWithCommas(clean));
+      }
     } else {
       setUsdInput('');
     }
@@ -533,23 +605,20 @@ export default function App() {
   };
 
   const handleSwapDirection = () => {
+    if (historyDebounceRef.current) {
+      clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
     setDirection((prev) => (prev === 'USD_TO_TOMAN' ? 'TOMAN_TO_USD' : 'USD_TO_TOMAN'));
   };
 
   const handleClear = () => {
+    if (historyDebounceRef.current) {
+      clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
     setUsdInput('');
     setTomanInput('');
-  };
-
-  const saveHistory = (usd: string, toman: string) => {
-    if (!usd || !toman) return;
-    const item = { id: Date.now().toString(), usd, toman };
-    setHistory((prev) => {
-      const filtered = prev.filter((i) => i.usd !== usd).slice(0, 29);
-      const updated = [item, ...filtered];
-      AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
   };
 
   const copyResult = async (val: string, tag: string) => {
@@ -746,7 +815,7 @@ export default function App() {
                 keyboardType="numeric"
                 value={rateText}
                 onChangeText={handleRateChange}
-                placeholder="200,000"
+                placeholder="250,000"
                 placeholderTextColor={t.textMuted}
               />
 
@@ -848,6 +917,11 @@ export default function App() {
                   placeholderTextColor={t.textMuted}
                   value={isUsdSource ? usdInput : tomanInput}
                   onChangeText={isUsdSource ? handleUsdChange : handleTomanChange}
+                  onBlur={() => {
+                    if (usdInput && tomanInput) {
+                      commitSaveHistory(usdInput, tomanInput);
+                    }
+                  }}
                 />
 
                 {(isUsdSource ? usdInput : tomanInput) !== '' && (
@@ -989,7 +1063,15 @@ export default function App() {
                   onPress={() => {
                     setDirection('USD_TO_TOMAN');
                     setUsdInput(chip);
-                    calcFromUsd(chip);
+                    const rate = getRateNumber();
+                    if (rate > 0) {
+                      const toman = parseFloat(chip) * rate;
+                      const res = formatWithCommas(toman, 2);
+                      setTomanInput(res);
+                      commitSaveHistory(chip, res);
+                    } else {
+                      setTomanInput('');
+                    }
                   }}
                 >
                   <Text style={[styles.chipSymbol, { color: t.accentGreen }, fontBold]}>$</Text>
