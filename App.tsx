@@ -33,7 +33,7 @@ const THEME_STORAGE_KEY = '@chand_mishe_theme';
 const LANG_STORAGE_KEY = '@chand_mishe_lang';
 const HISTORY_STORAGE_KEY = '@chand_mishe_history';
 
-const CURRENT_APP_VERSION = '1.0.2';
+const CURRENT_APP_VERSION = '1.0.1';
 const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/AmirNrfox/Chand-Mishe/main/version.json';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/AmirNrfox/Chand-Mishe/releases/latest';
 
@@ -67,7 +67,7 @@ const translations = {
     historyTitle: 'آخرین محاسبات:',
     symbolToman: 'ت',
     usdUnit: 'دلار',
-    appVersion: 'نسخه ۱.۰.۲',
+    appVersion: 'نسخه ۱.۰.۱',
     aboutTitle: 'درباره برنامه',
     aboutDesc: 'ابزاری سبک و سریع برای محاسبه قیمت خرید های دلاری شما به تومان یا بالعکس بر اساس نرخ آنلاین یا دستی',
     devBy: 'طراحی و توسعه توسط امیرعلی نظری',
@@ -114,7 +114,7 @@ const translations = {
     historyTitle: 'Recent Conversions:',
     symbolToman: 'TM',
     usdUnit: 'USD',
-    appVersion: 'Version 1.0.2',
+    appVersion: 'Version 1.0.1',
     aboutTitle: 'About App',
     aboutDesc: 'A lightweight and fast tool to calculate your USD purchase prices in Toman or vice versa based on live or custom rates',
     devBy: 'Designed and Developed by AmirAli Nazari',
