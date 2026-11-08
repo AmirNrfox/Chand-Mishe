@@ -52,7 +52,24 @@ jobs:
           curl -fL --retry 3 --retry-delay 2 -o /tmp/gradle-9.4.1-bin.zip "https://mirrors.cloud.tencent.com/gradle/gradle-9.4.1-bin.zip" || \
           curl -fL --retry 3 --retry-delay 2 -o /tmp/gradle-9.4.1-bin.zip "https://repo.huaweicloud.com/gradle/gradle-9.4.1-bin.zip"
           sed -i 's|distributionUrl=.*|distributionUrl=file\\:///tmp/gradle-9.4.1-bin.zip|' gradle/wrapper/gradle-wrapper.properties
-          cat gradle/wrapper/gradle-wrapper.properties
+
+          echo "Injecting high-speed Maven mirrors to bypass GitHub Releases 504 timeouts..."
+          sed -i 's|mavenCentral()|maven { url "https://maven.aliyun.com/repository/public" }\n    maven { url "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/" }\n    mavenCentral()|g' build.gradle
+          mkdir -p ~/.gradle
+          cat << 'EOF' > ~/.gradle/init.gradle
+          allprojects {
+              buildscript {
+                  repositories {
+                      maven { url 'https://maven.aliyun.com/repository/public' }
+                      maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+                  }
+              }
+              repositories {
+                  maven { url 'https://maven.aliyun.com/repository/public' }
+                  maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+              }
+          }
+          EOF
 
           echo "::group::Building arm64-v8a APK"
           ./gradlew assembleRelease --no-daemon \
