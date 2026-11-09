@@ -27,9 +27,24 @@ export interface HistoryRecord {
   currencyId: CurrencyId;
   currencyCode: string;
   currencySymbol: string;
+  currencyName?: {
+    fa: string;
+    en: string;
+  };
   /** Preserved for structural backward compatibility */
   usd?: string;
   toman?: string;
+}
+
+export interface HistoricalCurrencySnapshot {
+  id: CurrencyId;
+  code: string;
+  symbol: string;
+  name: {
+    fa: string;
+    en: string;
+  };
+  isDeleted: boolean;
 }
 
 export const STORAGE_KEYS = {
@@ -178,21 +193,90 @@ export function parseRate(rawRate: string): number | null {
 }
 
 /**
+ * Safely parses JSON strings from storage without throwing exceptions.
+ */
+export function safeParseJson<T>(raw: string | null, fallback: T): { success: boolean; data: T } {
+  if (!raw) return { success: true, data: fallback };
+  try {
+    const parsed = JSON.parse(raw);
+    return { success: true, data: parsed };
+  } catch {
+    return { success: false, data: fallback };
+  }
+}
+
+/**
+ * Resolves the appropriate rate to apply when restoring a history record.
+ * Prioritizes the historical rate applied during that calculation,
+ * falling back to current rate only if historical rate is absent or invalid.
+ */
+export function resolveHistoricalRate(
+  historicalRateApplied: string | undefined,
+  currentRate: string | undefined
+): number | null {
+  const fromHistory = parseRate(historicalRateApplied || '');
+  if (fromHistory !== null && fromHistory > 0) {
+    return fromHistory;
+  }
+  const fromCurrent = parseRate(currentRate || '');
+  if (fromCurrent !== null && fromCurrent > 0) {
+    return fromCurrent;
+  }
+  return null;
+}
+
+/**
+ * Formats a Toman amount as an integer string with comma grouping.
+ * ALWAYS applies Math.round() on numeric values to ensure zero decimals under all circumstances.
+ * Accepts numbers or strings (including strings with existing commas or Persian/Arabic digits).
+ *
+ * Examples:
+ *  formatToman(3000000.64) -> "3,000,001"
+ *  formatToman(3000000.20) -> "3,000,000"
+ *  formatToman("3,000,000.64") -> "3,000,001"
+ *  formatToman(0) -> "0"
+ *  formatToman("") -> ""
+ */
+export function formatToman(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' && value.trim() === '') return '';
+
+  let num: number;
+  if (typeof value === 'number') {
+    num = value;
+  } else {
+    const clean = String(value)
+      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+      .replace(/٫/g, '.')
+      .replace(/,/g, '')
+      .trim();
+    num = parseFloat(clean);
+  }
+
+  if (isNaN(num) || !Number.isFinite(num)) return '';
+
+  const rounded = Math.round(num);
+  return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/**
  * Standard Conversion: 1 Foreign Unit = Rate Tomans
- * Amount * Rate = Toman
+ * Amount * Rate = Toman (ALWAYS rounded to nearest integer via Math.round)
  */
 export function convertForeignToToman(foreignAmount: number, rate: number): number | null {
   if (!isValidRate(rate) || isNaN(foreignAmount) || foreignAmount < 0) return null;
-  return foreignAmount * rate;
+  return Math.round(foreignAmount * rate);
 }
 
 /**
  * Standard Inverse Conversion:
  * Toman / Rate = Foreign Amount
+ * (Foreign currency amounts preserve decimals, rate is NOT rounded)
  */
 export function convertTomanToForeign(tomanAmount: number, rate: number): number | null {
   if (!isValidRate(rate) || isNaN(tomanAmount) || tomanAmount < 0) return null;
-  return tomanAmount / rate;
+  return Math.round(tomanAmount) / rate;
 }
 
 /**
@@ -210,6 +294,25 @@ export function isLegacyHistoryRecord(item: unknown): boolean {
  * Explicitly maps legacy usd/toman items to standard HistoryRecord.
  * Idempotent: already migrated items remain unchanged.
  */
+/**
+ * Checks whether a raw history value contains a decimal component.
+ * Supports both number (e.g. 3000000.64) and string (e.g. "3,000,000.64" or "۳,۰۰۰,۰۰۰٫۶۴").
+ */
+function hasDecimalPart(val: unknown): boolean {
+  if (val === null || val === undefined || val === '') return false;
+  if (typeof val === 'number') {
+    return !Number.isInteger(val);
+  }
+  const str = String(val);
+  return str.includes('.') || str.includes('٫');
+}
+
+/**
+ * Migrates an array of history items from legacy or mixed formats.
+ * Explicitly maps legacy usd/toman items to standard HistoryRecord.
+ * Safely normalizes both string and number representations of Toman amounts to rounded integer strings.
+ * Preserves all other fields (foreignAmount, rateApplied, etc.) completely intact.
+ */
 export function migrateLegacyHistory(rawItems: unknown[]): { migrated: boolean; records: HistoryRecord[] } {
   let hasMigrated = false;
   if (!Array.isArray(rawItems)) return { migrated: false, records: [] };
@@ -217,22 +320,55 @@ export function migrateLegacyHistory(rawItems: unknown[]): { migrated: boolean; 
   const records: HistoryRecord[] = rawItems.map((raw) => {
     if (isLegacyHistoryRecord(raw)) {
       hasMigrated = true;
-      const legacy = raw as { id?: string; usd?: string; toman?: string };
+      const legacy = raw as { id?: string | number; usd?: string | number; toman?: string | number };
       const idStr = String(legacy.id ?? Date.now());
       const ts = Number(idStr) || Date.now();
+      const rawToman = legacy.toman !== undefined && legacy.toman !== null ? legacy.toman : '';
+      const roundedToman = formatToman(rawToman as number | string);
+      const foreignStr = String(legacy.usd ?? '');
       return {
         id: idStr,
         timestamp: ts,
-        foreignAmount: String(legacy.usd ?? ''),
-        tomanAmount: String(legacy.toman ?? ''),
+        foreignAmount: foreignStr,
+        tomanAmount: roundedToman,
         rateApplied: '',
         currencyId: 'usd',
         currencyCode: 'USD',
         currencySymbol: '$',
-        usd: String(legacy.usd ?? ''),
-        toman: String(legacy.toman ?? ''),
+        currencyName: { fa: 'دلار / تتر', en: 'USD / USDT' },
+        usd: foreignStr,
+        toman: roundedToman,
       };
     }
+
+    if (typeof raw !== 'object' || raw === null) return raw as HistoryRecord;
+
+    const item = raw as Record<string, unknown>;
+    const rawTomanAmount = item.tomanAmount;
+    const rawToman = item.toman;
+
+    const hasDecimals = hasDecimalPart(rawTomanAmount) || hasDecimalPart(rawToman);
+    const hasNumericToman = typeof rawTomanAmount === 'number' || typeof rawToman === 'number';
+    const isMissingTomanAmount =
+      (rawTomanAmount === undefined || rawTomanAmount === null || rawTomanAmount === '') &&
+      rawToman !== undefined &&
+      rawToman !== null &&
+      rawToman !== '';
+
+    if (hasDecimals || hasNumericToman || isMissingTomanAmount) {
+      hasMigrated = true;
+      const targetVal =
+        rawTomanAmount !== undefined && rawTomanAmount !== null && rawTomanAmount !== ''
+          ? rawTomanAmount
+          : rawToman;
+      const rounded = formatToman(targetVal as number | string);
+      return {
+        ...item,
+        tomanAmount: rounded,
+        toman: rounded,
+      } as HistoryRecord;
+    }
+
     return raw as HistoryRecord;
   });
 
@@ -262,4 +398,27 @@ export function migrateRates(
   }
 
   return { migrated, rates: currentRates };
+}
+
+/**
+ * Resolves a snapshot for a historical record if the currency no longer exists in available currencies.
+ * Returns null if the currency is still available in availableCurrencies.
+ */
+export function getDeletedCurrencySnapshot(
+  record: HistoryRecord,
+  availableCurrencies: Currency[]
+): HistoricalCurrencySnapshot | null {
+  const isAvailable = availableCurrencies.some((c) => c.id === record.currencyId);
+  if (isAvailable) return null;
+
+  return {
+    id: record.currencyId,
+    code: record.currencyCode || 'CUSTOM',
+    symbol: record.currencySymbol || '$',
+    name: record.currencyName || {
+      fa: record.currencyCode || 'ارز حذف شده',
+      en: record.currencyCode || 'Deleted Currency',
+    },
+    isDeleted: true,
+  };
 }

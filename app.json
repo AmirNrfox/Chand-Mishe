@@ -2,7 +2,7 @@
   "expo": {
     "name": "چند میشه",
     "slug": "chand-mishe",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,7 @@
     },
     "android": {
       "package": "com.chandmishe.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#1A253B",
         "foregroundImage": "./assets/android-icon-foreground.png",
