@@ -28,6 +28,20 @@ import {
   Vazirmatn_700Bold,
   Vazirmatn_800ExtraBold,
 } from '@expo-google-fonts/vazirmatn';
+import {
+  Currency,
+  CurrencyId,
+  HistoryRecord,
+  DEFAULT_CURRENCIES,
+  STORAGE_KEYS,
+  CURRENT_MIGRATION_VERSION,
+  isValidRate,
+  parseRate,
+  convertForeignToToman,
+  convertTomanToForeign,
+  migrateLegacyHistory,
+  migrateRates,
+} from './src/types/currency';
 
 const RATE_STORAGE_KEY = '@chand_mishe_usd_rate';
 const THEME_STORAGE_KEY = '@chand_mishe_theme';
@@ -280,7 +294,10 @@ export default function App() {
   const [usdInput, setUsdInput] = useState<string>('');
   const [tomanInput, setTomanInput] = useState<string>('');
   const [direction, setDirection] = useState<'USD_TO_TOMAN' | 'TOMAN_TO_USD'>('USD_TO_TOMAN');
-  const [history, setHistory] = useState<Array<{ id: string; usd: string; toman: string }>>([]);
+  const [history, setHistory] = useState<HistoryRecord[]>([]);
+  const [activeCurrencyId, setActiveCurrencyId] = useState<CurrencyId>('usd');
+  const [customCurrencies, setCustomCurrencies] = useState<Currency[]>([]);
+  const [ratesById, setRatesById] = useState<Record<string, string>>({});
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -300,6 +317,9 @@ export default function App() {
   const [totalSizeStr, setTotalSizeStr] = useState<string>('13.8 MB');
   const [downloadedApkUri, setDownloadedApkUri] = useState<string | null>(null);
   const downloadResumableRef = useRef<FileSystem.DownloadResumable | null>(null);
+
+  const allCurrencies = [...DEFAULT_CURRENCIES, ...customCurrencies];
+  const activeCurrency = allCurrencies.find((c) => c.id === activeCurrencyId) || DEFAULT_CURRENCIES[0];
 
   const t = isDark ? themes.dark : themes.light;
   const tr = translations[lang];
@@ -333,13 +353,60 @@ export default function App() {
       const savedLang = (await AsyncStorage.getItem(LANG_STORAGE_KEY)) as Language | null;
       if (savedLang) setLang(savedLang);
 
-      const savedRate = await AsyncStorage.getItem(RATE_STORAGE_KEY);
-      if (savedRate) {
-        setRateText(formatIntegerWithCommas(savedRate));
+      // 1. Migration check (Idempotent execution with version key)
+      const migrationVersionStr = await AsyncStorage.getItem(STORAGE_KEYS.MIGRATION_VERSION);
+      const migrationVersion = migrationVersionStr ? parseInt(migrationVersionStr, 10) : 0;
+
+      // 2. Load rates map, custom currencies and active currency ID
+      const rawRates = await AsyncStorage.getItem(STORAGE_KEYS.RATES_BY_ID);
+      let ratesMap: Record<string, string> = rawRates ? JSON.parse(rawRates) : {};
+
+      const rawCustom = await AsyncStorage.getItem(STORAGE_KEYS.CUSTOM_CURRENCIES);
+      const customList: Currency[] = rawCustom ? JSON.parse(rawCustom) : [];
+      setCustomCurrencies(customList);
+
+      const savedActiveId = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_CURRENCY_ID);
+      const currentActiveId = savedActiveId || 'usd';
+      setActiveCurrencyId(currentActiveId);
+
+      // 3. Load & migrate history
+      const savedHist = await AsyncStorage.getItem(STORAGE_KEYS.HISTORY);
+      let historyList: HistoryRecord[] = [];
+      if (savedHist) {
+        try {
+          const parsed = JSON.parse(savedHist);
+          const { records } = migrateLegacyHistory(parsed);
+          historyList = records;
+        } catch (e) {
+          console.error('Error parsing history', e);
+        }
+      }
+      setHistory(historyList);
+
+      // 4. If migration needed (version < CURRENT_MIGRATION_VERSION):
+      if (migrationVersion < CURRENT_MIGRATION_VERSION) {
+        const legacyRate = await AsyncStorage.getItem(STORAGE_KEYS.LEGACY_USD_RATE);
+        const { rates: migratedRates } = migrateRates(legacyRate, ratesMap);
+        ratesMap = migratedRates;
+
+        // Perform safe atomic multiSet
+        await AsyncStorage.multiSet([
+          [STORAGE_KEYS.MIGRATION_VERSION, CURRENT_MIGRATION_VERSION.toString()],
+          [STORAGE_KEYS.RATES_BY_ID, JSON.stringify(ratesMap)],
+          [STORAGE_KEYS.HISTORY, JSON.stringify(historyList)],
+          [STORAGE_KEYS.ACTIVE_CURRENCY_ID, currentActiveId],
+        ]);
       }
 
-      const savedHist = await AsyncStorage.getItem(HISTORY_STORAGE_KEY);
-      if (savedHist) setHistory(JSON.parse(savedHist));
+      setRatesById(ratesMap);
+
+      // 5. Populate initial rate for active currency (isolated per currency)
+      const activeRate = ratesMap[currentActiveId] || '';
+      if (activeRate) {
+        setRateText(formatIntegerWithCommas(activeRate));
+      } else {
+        setRateText('');
+      }
     } catch (e) {
       console.error('Error loading data', e);
     }
@@ -358,18 +425,40 @@ export default function App() {
   };
 
   const getRateNumber = (): number => {
-    const n = parseFloat(cleanDigits(rateText));
-    return isNaN(n) || n <= 0 ? 0 : n;
+    const parsed = parseRate(rateText);
+    return parsed !== null ? parsed : 0;
   };
 
   const handleRateChange = async (val: string) => {
     const raw = cleanDigits(val).replace(/[^0-9]/g, '');
     const formatted = formatIntegerWithCommas(raw);
     setRateText(formatted);
+
+    const updatedRates = { ...ratesById };
     if (raw) {
-      await AsyncStorage.setItem(RATE_STORAGE_KEY, raw);
+      updatedRates[activeCurrencyId] = raw;
     } else {
-      await AsyncStorage.removeItem(RATE_STORAGE_KEY);
+      delete updatedRates[activeCurrencyId];
+    }
+    setRatesById(updatedRates);
+
+    try {
+      if (raw) {
+        const pairs: [string, string][] = [
+          [STORAGE_KEYS.RATES_BY_ID, JSON.stringify(updatedRates)],
+        ];
+        if (activeCurrencyId === 'usd') {
+          pairs.push([STORAGE_KEYS.LEGACY_USD_RATE, raw]);
+        }
+        await AsyncStorage.multiSet(pairs);
+      } else {
+        await AsyncStorage.setItem(STORAGE_KEYS.RATES_BY_ID, JSON.stringify(updatedRates));
+        if (activeCurrencyId === 'usd') {
+          await AsyncStorage.removeItem(STORAGE_KEYS.LEGACY_USD_RATE);
+        }
+      }
+    } catch (e) {
+      console.error('Error saving rate to storage', e);
     }
 
     const r = parseFloat(raw);
@@ -651,15 +740,29 @@ export default function App() {
     if (isNaN(numUsd) || numUsd <= 0 || isNaN(numToman) || numToman <= 0) return;
 
     const formattedToman = formatWithCommas(numToman, 2);
-    const item = { id: Date.now().toString(), usd: cleanUsd, toman: formattedToman };
+    const item: HistoryRecord = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      foreignAmount: cleanUsd,
+      tomanAmount: formattedToman,
+      rateApplied: rateText,
+      currencyId: activeCurrency.id,
+      currencyCode: activeCurrency.code,
+      currencySymbol: activeCurrency.symbol,
+      usd: cleanUsd,
+      toman: formattedToman,
+    };
 
     setHistory((prev) => {
       const filtered = prev.filter((i) => {
-        const prevUsd = parseFloat(cleanDigits(i.usd));
-        return Math.abs(prevUsd - numUsd) > 0.000001 && i.usd !== cleanUsd;
+        const prevForeign = parseFloat(cleanDigits(i.foreignAmount || i.usd || '0'));
+        return (
+          i.currencyId !== activeCurrency.id ||
+          (Math.abs(prevForeign - numUsd) > 0.000001 && (i.foreignAmount || i.usd) !== cleanUsd)
+        );
       }).slice(0, 29);
       const updated = [item, ...filtered];
-      AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
+      AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(updated));
       return updated;
     });
   };
@@ -699,10 +802,10 @@ export default function App() {
       return;
     }
 
-    const usd = parseFloat(clean);
-    if (!isNaN(usd) && rate > 0) {
-      const toman = usd * rate;
-      const res = formatWithCommas(toman, 2);
+    const foreign = parseFloat(clean);
+    const converted = !isNaN(foreign) ? convertForeignToToman(foreign, rate) : null;
+    if (converted !== null) {
+      const res = formatWithCommas(converted, 2);
       setTomanInput(res);
       if (save) {
         scheduleSaveHistory(clean, res);
@@ -736,9 +839,9 @@ export default function App() {
     }
 
     const toman = parseFloat(clean);
-    if (!isNaN(toman) && rate > 0) {
-      const usd = toman / rate;
-      const res = usd < 1 ? usd.toFixed(4).replace(/\.?0+$/, '') : usd.toFixed(2);
+    const converted = !isNaN(toman) ? convertTomanToForeign(toman, rate) : null;
+    if (converted !== null) {
+      const res = converted < 1 ? converted.toFixed(4).replace(/\.?0+$/, '') : converted.toFixed(2);
       setUsdInput(res);
       if (save) {
         scheduleSaveHistory(res, formatIntegerWithCommas(clean));
@@ -1287,12 +1390,15 @@ export default function App() {
                         activeOpacity={0.7}
                         onPress={() => {
                           setDirection('USD_TO_TOMAN');
-                          setUsdInput(h.usd);
-                          calcFromUsd(h.usd);
+                          const val = h.foreignAmount || h.usd || '';
+                          setUsdInput(val);
+                          calcFromUsd(val);
                         }}
                       >
                         <View style={[styles.histUsdCol, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                          <Text style={[styles.histUsd, { color: t.accentGreen }, fontBold]}>${h.usd}</Text>
+                          <Text style={[styles.histUsd, { color: t.accentGreen }, fontBold]}>
+                            {h.currencySymbol || '$'}{h.foreignAmount || h.usd}
+                          </Text>
                         </View>
 
                         <View style={styles.histArrowCol}>
