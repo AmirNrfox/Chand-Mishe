@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Modal,
   Linking,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -801,14 +802,11 @@ export default function App() {
           <View style={[styles.topBar, { flexDirection }]}>
             <View style={[styles.brandContainer, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
               <View style={[styles.titleRow, { flexDirection }]}>
-                <LinearGradient
-                  colors={t.logoGradients}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                <Image
+                  source={require('./assets/icon.png')}
                   style={styles.modernAppLogoWrap}
-                >
-                  <MaterialCommunityIcons name="swap-horizontal-bold" size={20} color="#FFFFFF" />
-                </LinearGradient>
+                  resizeMode="cover"
+                />
                 <Text style={[styles.appTitle, { color: t.textMain }, fontBlack]}>
                   {tr.appTitle}
                 </Text>
@@ -1359,14 +1357,11 @@ export default function App() {
               </TouchableOpacity>
             </View>
             <View style={styles.modalHero}>
-              <LinearGradient
-                colors={t.logoGradients}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              <Image
+                source={require('./assets/icon.png')}
                 style={styles.modalLogo}
-              >
-                <MaterialCommunityIcons name="swap-horizontal-bold" size={28} color="#FFFFFF" />
-              </LinearGradient>
+                resizeMode="cover"
+              />
               <Text style={[styles.modalAppName, { color: t.textMain }, fontBlack]}>
                 {tr.appTitle}
               </Text>
@@ -1833,14 +1828,8 @@ const styles = StyleSheet.create({
   modernAppLogoWrap: {
     width: 36,
     height: 36,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#38BDF8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 11,
+    overflow: 'hidden',
   },
   appTitle: {
     fontSize: 22,
@@ -2224,11 +2213,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   modalLogo: {
-    width: 52,
-    height: 52,
+    width: 60,
+    height: 60,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginBottom: 8,
   },
   modalAppName: {
