@@ -1,21 +1,25 @@
-The MIT License (MIT)
+Copyright (c) 2026 AmirAli Nazari. All rights reserved.
 
-Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)
+Chand Mishe (چند میشه؟) - Currency Calculation & Exchange Rate Tool
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This source code is made publicly available for viewing, educational, and verification purposes.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+TERMS AND CONDITIONS
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. Ownership:
+All rights, title, and interest in and to this software, including but not limited to the source code, application architecture, user interface design, logos, visual assets, and the "Chand Mishe" (چند میشه؟) brand name, are and remain the exclusive intellectual property of AmirAli Nazari.
+
+2. Permitted Use:
+You are permitted to:
+- View, clone, and study the source code for personal, non-commercial educational purposes.
+- Inspect the codebase to verify security, privacy, and absence of malicious code.
+- Submit bug reports, issues, or pull requests for consideration by the author.
+
+3. Prohibited Use:
+You are STRICTLY PROHIBITED from:
+- Publishing, redistributing, or sublicensing this application or any derivative work in any app store or marketplace (including but not limited to Google Play, Cafe Bazaar, Myket, Apple App Store, or any third-party APK distribution platform) under any name.
+- Using any portion of the source code, branding, logos, or UI designs for commercial purposes, paid services, or monetary gain without prior explicit written consent from the author.
+- Removing or altering any copyright notices, author attributions, or brand markings in the software.
+
+4. Disclaimer of Warranty:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, FINANCIAL ACCURACY, OR NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, FINANCIAL LOSS, OR OTHER LIABILITY ARISING FROM THE USE OF OR INABILITY TO USE THIS APPLICATION.

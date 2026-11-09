@@ -10,7 +10,7 @@
 [![React Native](https://img.shields.io/badge/React_Native-0.88-61DAFB?style=flat-square&logo=react&logoColor=black)](https://reactnative.dev/)
 [![Expo](https://img.shields.io/badge/Expo-SDK_58-000020?style=flat-square&logo=expo&logoColor=white)](https://expo.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/License-MIT-10B981?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-All_Rights_Reserved-3B82F6?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Android-APK_Ready-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/AmirNrfox/Chand-Mishe/releases)
 
 <br/>
@@ -169,6 +169,15 @@ npx expo start
 
 ---
 
+### 📄 شرایط استفاده و مالکیت معنوی (License)
+
+کدهای این پروژه جهت مشاهده، بررسی امنیت و اهداف آموزشی به صورت عمومی منتشر شده‌اند، اما **تمامی حقوق مادی و معنوی، سورس‌کد، دیزاین و نشان تجاری «چند میشه؟» انحصاراً متعلق به امیرعلی نظری است.**
+
+* هرگونه کپی‌برداری، بازنشر، انتشار نسخه تغییریافته، عرضه در مارکت‌های اندرویدی (کافه‌بازار، مایکت، گوگل‌پلی) یا استفاده تجاری از این پروژه بدون رضایت کتبی پدیدآورنده **ممنوع و غیرمجاز** است.
+
+---
+
 ### 📄 License
 
-This open-source project is licensed under the [MIT License](LICENSE).
+Copyright (c) 2026 **AmirAli Nazari**. All rights reserved.  
+The source code is publicly accessible for viewing, educational, and verification purposes. Redistribution, commercial exploitation, or republication on any app store without explicit written consent is strictly prohibited. See [LICENSE](LICENSE) for details.

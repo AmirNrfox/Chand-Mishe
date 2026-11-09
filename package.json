@@ -1,6 +1,7 @@
 {
   "name": "chand-mishe",
   "version": "1.0.1",
+  "license": "UNLICENSED",
   "main": "index.js",
   "dependencies": {
     "@expo-google-fonts/vazirmatn": "^0.4.1",
