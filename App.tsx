@@ -42,6 +42,8 @@ import {
   migrateLegacyHistory,
   migrateRates,
 } from './src/types/currency';
+import { CurrencySelector } from './src/components/CurrencySelector';
+import { CustomCurrencyModal } from './src/components/CustomCurrencyModal';
 
 const RATE_STORAGE_KEY = '@chand_mishe_usd_rate';
 const THEME_STORAGE_KEY = '@chand_mishe_theme';
@@ -318,6 +320,9 @@ export default function App() {
   const [downloadedApkUri, setDownloadedApkUri] = useState<string | null>(null);
   const downloadResumableRef = useRef<FileSystem.DownloadResumable | null>(null);
 
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState<boolean>(false);
+  const [currencyToEdit, setCurrencyToEdit] = useState<Currency | null>(null);
+
   const allCurrencies = [...DEFAULT_CURRENCIES, ...customCurrencies];
   const activeCurrency = allCurrencies.find((c) => c.id === activeCurrencyId) || DEFAULT_CURRENCIES[0];
 
@@ -475,6 +480,169 @@ export default function App() {
         setUsdInput('');
       }
     }
+  };
+
+  const handleSelectCurrency = async (curr: Currency) => {
+    if (curr.id === activeCurrencyId) return;
+
+    if (historyDebounceRef.current) {
+      clearTimeout(historyDebounceRef.current);
+      historyDebounceRef.current = null;
+    }
+
+    // Reset inputs when switching currencies to avoid using previous rates (Requirement 10)
+    setUsdInput('');
+    setTomanInput('');
+    setRateStatusMessage('');
+
+    setActiveCurrencyId(curr.id);
+
+    const savedRate = ratesById[curr.id] || '';
+    if (savedRate) {
+      setRateText(formatIntegerWithCommas(savedRate));
+    } else {
+      setRateText('');
+    }
+
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CURRENCY_ID, curr.id);
+    } catch (e) {
+      console.error('Error saving active currency ID', e);
+    }
+  };
+
+  const handleOpenAddCustomCurrency = () => {
+    setCurrencyToEdit(null);
+    setIsCustomModalOpen(true);
+  };
+
+  const handleOpenEditCustomCurrency = (curr: Currency) => {
+    setCurrencyToEdit(curr);
+    setIsCustomModalOpen(true);
+  };
+
+  const handleSaveCustomCurrency = async (savedCurrency: Currency, rate: string) => {
+    const existingIndex = customCurrencies.findIndex((c) => c.id === savedCurrency.id);
+    let updatedList: Currency[];
+    if (existingIndex >= 0) {
+      updatedList = [...customCurrencies];
+      updatedList[existingIndex] = savedCurrency;
+    } else {
+      updatedList = [...customCurrencies, savedCurrency];
+    }
+    setCustomCurrencies(updatedList);
+
+    const updatedRates = { ...ratesById };
+    if (rate) {
+      updatedRates[savedCurrency.id] = rate;
+    } else {
+      delete updatedRates[savedCurrency.id];
+    }
+    setRatesById(updatedRates);
+
+    setActiveCurrencyId(savedCurrency.id);
+    setRateText(rate ? formatIntegerWithCommas(rate) : '');
+    setUsdInput('');
+    setTomanInput('');
+
+    try {
+      await AsyncStorage.multiSet([
+        [STORAGE_KEYS.CUSTOM_CURRENCIES, JSON.stringify(updatedList)],
+        [STORAGE_KEYS.RATES_BY_ID, JSON.stringify(updatedRates)],
+        [STORAGE_KEYS.ACTIVE_CURRENCY_ID, savedCurrency.id],
+      ]);
+    } catch (e) {
+      console.error('Error saving custom currency to storage', e);
+    }
+  };
+
+  const handleDeleteCustomCurrency = async (currencyId: string) => {
+    const updatedList = customCurrencies.filter((c) => c.id !== currencyId);
+    setCustomCurrencies(updatedList);
+
+    const updatedRates = { ...ratesById };
+    delete updatedRates[currencyId];
+    setRatesById(updatedRates);
+
+    let nextActiveId = activeCurrencyId;
+    if (activeCurrencyId === currencyId) {
+      nextActiveId = 'usd';
+      setActiveCurrencyId('usd');
+      const usdRate = updatedRates['usd'] || '';
+      setRateText(usdRate ? formatIntegerWithCommas(usdRate) : '');
+      setUsdInput('');
+      setTomanInput('');
+    }
+
+    try {
+      await AsyncStorage.multiSet([
+        [STORAGE_KEYS.CUSTOM_CURRENCIES, JSON.stringify(updatedList)],
+        [STORAGE_KEYS.RATES_BY_ID, JSON.stringify(updatedRates)],
+        [STORAGE_KEYS.ACTIVE_CURRENCY_ID, nextActiveId],
+      ]);
+    } catch (e) {
+      console.error('Error deleting custom currency from storage', e);
+    }
+  };
+
+  const getForeignCurrencyTitle = () => {
+    if (lang === 'fa') {
+      switch (activeCurrency.id) {
+        case 'usd':
+          return tr.usdTitle;
+        case 'eur':
+          return 'مبلغ به یورو';
+        case 'aed':
+          return 'مبلغ به درهم';
+        case 'try':
+          return 'مبلغ به لیر';
+        case 'iqd':
+          return 'مبلغ به دینار';
+        default:
+          return `مبلغ به ${activeCurrency.name.fa}`;
+      }
+    } else {
+      switch (activeCurrency.id) {
+        case 'usd':
+          return tr.usdTitle;
+        case 'eur':
+          return 'Amount in Euro';
+        case 'aed':
+          return 'Amount in AED';
+        case 'try':
+          return 'Amount in Turkish Lira';
+        case 'iqd':
+          return 'Amount in Iraqi Dinar';
+        default:
+          return `Amount in ${activeCurrency.name.en}`;
+      }
+    }
+  };
+
+  const getForeignPlaceholder = () => {
+    if (activeCurrency.id === 'usd') {
+      return tr.usdPlaceholder;
+    }
+    if (activeCurrency.quickAmounts && activeCurrency.quickAmounts.length >= 2) {
+      return `${activeCurrency.quickAmounts[0]} ${isRTL ? 'یا' : 'or'} ${activeCurrency.quickAmounts[1]}`;
+    }
+    return '10 or 100';
+  };
+
+  const getRateCardLabel = () => {
+    if (activeCurrency.id === 'usd') {
+      return tr.rateLabel;
+    }
+    return isRTL ? `نرخ ۱ ${activeCurrency.name.fa}:` : `1 ${activeCurrency.name.en} Rate:`;
+  };
+
+  const getRateCardBadgeText = () => {
+    if (activeCurrency.id === 'usd') {
+      return isRTL ? '$ ۱ / تتر' : '$ 1 / USDT';
+    }
+    return isRTL
+      ? `${activeCurrency.symbol} ۱ / ${activeCurrency.code}`
+      : `${activeCurrency.symbol} 1 / ${activeCurrency.code}`;
   };
 
   const fetchLiveRate = async () => {
@@ -976,64 +1144,96 @@ export default function App() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <CurrencySelector
+            currencies={allCurrencies}
+            activeCurrencyId={activeCurrencyId}
+            onSelectCurrency={handleSelectCurrency}
+            onAddCurrency={handleOpenAddCustomCurrency}
+            onEditCurrency={handleOpenEditCustomCurrency}
+            theme={t}
+            isDark={isDark}
+            isRTL={isRTL}
+            fontBold={fontBold}
+            fontSemiBold={fontSemiBold}
+            fontRegular={fontRegular}
+          />
+
           <View style={[styles.rateCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
             <View style={[styles.rateHeaderRow, { flexDirection }]}>
               <View style={[styles.rateHeaderTitleWrap, { flexDirection }]}>
                 <Ionicons name="trending-up-outline" size={16} color={t.primary} />
                 <Text style={[styles.rateLabelText, { color: t.textSub }, fontSemiBold]}>
-                  {tr.rateLabel}
+                  {getRateCardLabel()}
                 </Text>
               </View>
 
-              <TouchableOpacity
-                onPress={fetchLiveRate}
-                disabled={isLoadingRate || cooldownSeconds > 0}
-                activeOpacity={0.7}
-                style={[
-                  styles.fetchRatePill,
-                  {
-                    backgroundColor:
-                      cooldownSeconds > 0
-                        ? isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9'
-                        : isDark ? 'rgba(56, 189, 248, 0.12)' : '#EEF2FF',
-                    borderColor:
-                      cooldownSeconds > 0
-                        ? isDark ? 'rgba(255, 255, 255, 0.10)' : '#E2E8F0'
-                        : isDark ? 'rgba(56, 189, 248, 0.35)' : '#C7D2FE',
-                    flexDirection: isRTL ? 'row-reverse' : 'row',
-                  },
-                ]}
-              >
-                {isLoadingRate ? (
-                  <ActivityIndicator size="small" color={isDark ? '#38BDF8' : '#4F46E5'} />
-                ) : cooldownSeconds > 0 ? (
-                  <Ionicons name="time-outline" size={14} color={t.textMuted} />
-                ) : (
-                  <Ionicons name="cloud-download-outline" size={14} color={isDark ? '#38BDF8' : '#4F46E5'} />
-                )}
-
-                <Text
-                  numberOfLines={1}
+              {activeCurrency.id === 'usd' ? (
+                <TouchableOpacity
+                  onPress={fetchLiveRate}
+                  disabled={isLoadingRate || cooldownSeconds > 0}
+                  activeOpacity={0.7}
                   style={[
-                    styles.fetchRateText,
+                    styles.fetchRatePill,
                     {
-                      color:
+                      backgroundColor:
                         cooldownSeconds > 0
-                          ? t.textMuted
-                          : isDark
-                          ? '#38BDF8'
-                          : '#4F46E5',
+                          ? isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9'
+                          : isDark ? 'rgba(56, 189, 248, 0.12)' : '#EEF2FF',
+                      borderColor:
+                        cooldownSeconds > 0
+                          ? isDark ? 'rgba(255, 255, 255, 0.10)' : '#E2E8F0'
+                          : isDark ? 'rgba(56, 189, 248, 0.35)' : '#C7D2FE',
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
                     },
-                    fontBold,
                   ]}
                 >
-                  {isLoadingRate
-                    ? tr.fetchingRate
-                    : cooldownSeconds > 0
-                    ? `${cooldownSeconds} ${tr.cooldownWait}`
-                    : tr.fetchLiveRate}
-                </Text>
-              </TouchableOpacity>
+                  {isLoadingRate ? (
+                    <ActivityIndicator size="small" color={isDark ? '#38BDF8' : '#4F46E5'} />
+                  ) : cooldownSeconds > 0 ? (
+                    <Ionicons name="time-outline" size={14} color={t.textMuted} />
+                  ) : (
+                    <Ionicons name="cloud-download-outline" size={14} color={isDark ? '#38BDF8' : '#4F46E5'} />
+                  )}
+
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.fetchRateText,
+                      {
+                        color:
+                          cooldownSeconds > 0
+                            ? t.textMuted
+                            : isDark
+                            ? '#38BDF8'
+                            : '#4F46E5',
+                      },
+                      fontBold,
+                    ]}
+                  >
+                    {isLoadingRate
+                      ? tr.fetchingRate
+                      : cooldownSeconds > 0
+                      ? `${cooldownSeconds} ${tr.cooldownWait}`
+                      : tr.fetchLiveRate}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={[
+                    styles.manualRateBadge,
+                    {
+                      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.10)' : '#E2E8F0',
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                    },
+                  ]}
+                >
+                  <Ionicons name="bookmark-outline" size={13} color={t.textMuted} />
+                  <Text style={[styles.manualRateText, { color: t.textSub }, fontSemiBold]}>
+                    {isRTL ? 'نرخ ذخیره‌شده' : 'Saved Rate'}
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View
@@ -1048,7 +1248,7 @@ export default function App() {
             >
               <View style={[styles.rateBadge, { backgroundColor: t.primaryBg }]}>
                 <Text style={[styles.rateBadgeText, { color: t.primary }, fontBold]}>
-                  {isRTL ? '$ ۱ / تتر' : '$ 1 / USDT'}
+                  {getRateCardBadgeText()}
                 </Text>
               </View>
 
@@ -1116,7 +1316,7 @@ export default function App() {
                     fontBold,
                   ]}
                 >
-                  {isUsdSource ? tr.usdTitle : tr.tomanTitle}
+                  {isUsdSource ? getForeignCurrencyTitle() : tr.tomanTitle}
                 </Text>
                 <View style={[styles.badgeSource, { backgroundColor: t.primaryBg }]}>
                   <Text style={[styles.badgeSourceText, { color: t.primary }, fontBold]}>
@@ -1150,7 +1350,7 @@ export default function App() {
                       fontBold,
                     ]}
                   >
-                    {isUsdSource ? '$' : tr.symbolToman}
+                    {isUsdSource ? activeCurrency.symbol : tr.symbolToman}
                   </Text>
                 </View>
 
@@ -1164,7 +1364,7 @@ export default function App() {
                     fontBold,
                   ]}
                   keyboardType={isUsdSource ? 'decimal-pad' : 'numeric'}
-                  placeholder={isUsdSource ? tr.usdPlaceholder : tr.tomanPlaceholder}
+                  placeholder={isUsdSource ? getForeignPlaceholder() : tr.tomanPlaceholder}
                   placeholderTextColor={t.textMuted}
                   value={isUsdSource ? usdInput : tomanInput}
                   onChangeText={isUsdSource ? handleUsdChange : handleTomanChange}
@@ -1208,7 +1408,7 @@ export default function App() {
                     fontBold,
                   ]}
                 >
-                  {!isUsdSource ? tr.usdTitle : tr.tomanTitle}
+                  {!isUsdSource ? getForeignCurrencyTitle() : tr.tomanTitle}
                 </Text>
                 {(isUsdSource ? tomanInput : usdInput) !== '' && (
                   <TouchableOpacity
@@ -1253,7 +1453,7 @@ export default function App() {
                       fontBold,
                     ]}
                   >
-                    {!isUsdSource ? '$' : tr.symbolToman}
+                    {!isUsdSource ? activeCurrency.symbol : tr.symbolToman}
                   </Text>
                 </View>
 
@@ -1273,7 +1473,7 @@ export default function App() {
                 </Text>
 
                 <Text style={[styles.unitLabel, { color: t.textSub }, fontSemiBold]}>
-                  {!isUsdSource ? tr.usdUnit : tr.rateUnit}
+                  {!isUsdSource ? (isRTL ? activeCurrency.name.fa : activeCurrency.code) : tr.rateUnit}
                 </Text>
               </View>
             </View>
@@ -1303,7 +1503,7 @@ export default function App() {
                 { flexDirection: isRTL ? 'row-reverse' : 'row' },
               ]}
             >
-              {['0.1', '0.5', '0.99', '1', '1.99', '2.5', '4.99', '9.99', '14.99', '20', '49.99', '99.99'].map((chip) => (
+              {activeCurrency.quickAmounts.map((chip) => (
                 <TouchableOpacity
                   key={chip}
                   style={[
@@ -1316,16 +1516,20 @@ export default function App() {
                     setUsdInput(chip);
                     const rate = getRateNumber();
                     if (rate > 0) {
-                      const toman = parseFloat(chip) * rate;
-                      const res = formatWithCommas(toman, 2);
-                      setTomanInput(res);
-                      commitSaveHistory(chip, res);
+                      const converted = convertForeignToToman(parseFloat(chip), rate);
+                      if (converted !== null) {
+                        const res = formatWithCommas(converted, 2);
+                        setTomanInput(res);
+                        commitSaveHistory(chip, res);
+                      }
                     } else {
                       setTomanInput('');
                     }
                   }}
                 >
-                  <Text style={[styles.chipSymbol, { color: t.accentGreen }, fontBold]}>$</Text>
+                  <Text style={[styles.chipSymbol, { color: t.accentGreen }, fontBold]}>
+                    {activeCurrency.symbol}
+                  </Text>
                   <Text style={[styles.chipTextModern, { color: t.textMain }, fontBold]}>{chip}</Text>
                 </TouchableOpacity>
               ))}
@@ -1356,6 +1560,7 @@ export default function App() {
                       onPress={(e) => {
                         e.stopPropagation();
                         setHistory([]);
+                        AsyncStorage.removeItem(STORAGE_KEYS.HISTORY);
                         AsyncStorage.removeItem(HISTORY_STORAGE_KEY);
                       }}
                       style={styles.trashBtn}
@@ -1389,16 +1594,36 @@ export default function App() {
                         ]}
                         activeOpacity={0.7}
                         onPress={() => {
+                          if (h.currencyId && h.currencyId !== activeCurrencyId) {
+                            setActiveCurrencyId(h.currencyId);
+                            const savedRate = ratesById[h.currencyId] || h.rateApplied || '';
+                            if (savedRate) {
+                              setRateText(formatIntegerWithCommas(savedRate));
+                            }
+                            AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CURRENCY_ID, h.currencyId);
+                          }
                           setDirection('USD_TO_TOMAN');
                           const val = h.foreignAmount || h.usd || '';
                           setUsdInput(val);
-                          calcFromUsd(val);
+                          const r =
+                            parseRate(ratesById[h.currencyId || activeCurrencyId] || h.rateApplied || rateText) ||
+                            getRateNumber();
+                          calcFromUsd(val, r);
                         }}
                       >
                         <View style={[styles.histUsdCol, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                          <Text style={[styles.histUsd, { color: t.accentGreen }, fontBold]}>
-                            {h.currencySymbol || '$'}{h.foreignAmount || h.usd}
-                          </Text>
+                          <View style={[styles.histCurrencyPillRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                            <Text style={[styles.histUsd, { color: t.accentGreen }, fontBold]}>
+                              {h.currencySymbol || '$'}{h.foreignAmount || h.usd}
+                            </Text>
+                            {h.currencyCode ? (
+                              <View style={[styles.histCurrencyTag, { backgroundColor: t.chipBg }]}>
+                                <Text style={[styles.histCurrencyTagText, { color: t.textMuted }, fontSemiBold]}>
+                                  {h.currencyCode}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
                         </View>
 
                         <View style={styles.histArrowCol}>
@@ -1411,7 +1636,7 @@ export default function App() {
 
                         <View style={[styles.histTomanCol, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
                           <Text style={[styles.histToman, { color: t.primary }, fontBold]}>
-                            {h.toman} {tr.rateUnit}
+                            {h.tomanAmount || h.toman} {tr.rateUnit}
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -1431,6 +1656,21 @@ export default function App() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <CustomCurrencyModal
+        visible={isCustomModalOpen}
+        onClose={() => setIsCustomModalOpen(false)}
+        onSave={handleSaveCustomCurrency}
+        onDelete={handleDeleteCustomCurrency}
+        currencyToEdit={currencyToEdit}
+        currentRate={currencyToEdit ? ratesById[currencyToEdit.id] : undefined}
+        theme={t}
+        isDark={isDark}
+        isRTL={isRTL}
+        fontBold={fontBold}
+        fontSemiBold={fontSemiBold}
+        fontRegular={fontRegular}
+      />
       <Modal
         visible={isAboutOpen}
         transparent={true}
@@ -1995,6 +2235,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flexShrink: 0,
   },
+  manualRateBadge: {
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexShrink: 0,
+  },
+  manualRateText: {
+    fontSize: 11,
+    flexShrink: 0,
+  },
   rateStatusRow: {
     alignItems: 'center',
     gap: 5,
@@ -2253,6 +2506,19 @@ const styles = StyleSheet.create({
   },
   histUsdCol: {
     flex: 1,
+  },
+  histCurrencyPillRow: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  histCurrencyTag: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  histCurrencyTagText: {
+    fontSize: 9,
+    letterSpacing: 0.5,
   },
   histArrowCol: {
     width: 32,

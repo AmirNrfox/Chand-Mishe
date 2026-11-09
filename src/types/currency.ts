@@ -116,6 +116,42 @@ export function generateCustomCurrencyId(): string {
 }
 
 /**
+ * Creates or updates a custom currency model with valid defaults.
+ */
+export function createCustomCurrency(params: {
+  id?: string;
+  name: string;
+  code?: string;
+  symbol: string;
+  quickAmounts?: string[];
+}): Currency {
+  const id = params.id || generateCustomCurrencyId();
+  const trimmedName = params.name.trim();
+  const code = (
+    params.code?.trim() ||
+    params.symbol?.trim() ||
+    trimmedName.slice(0, 4) ||
+    'CUSTOM'
+  ).toUpperCase().slice(0, 6);
+  const symbol = params.symbol.trim() || code;
+  return {
+    id,
+    code,
+    name: {
+      fa: trimmedName,
+      en: trimmedName,
+    },
+    symbol,
+    isCustom: true,
+    hasLiveRate: false,
+    quickAmounts:
+      params.quickAmounts && params.quickAmounts.length > 0
+        ? params.quickAmounts
+        : ['1', '5', '10', '25', '50', '100', '250', '500'],
+  };
+}
+
+/**
  * Validates whether a rate is a strictly positive finite number.
  */
 export function isValidRate(rate: unknown): boolean {
