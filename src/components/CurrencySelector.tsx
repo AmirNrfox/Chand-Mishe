@@ -39,12 +39,47 @@ export const CurrencySelector: React.FC<CurrencySelectorProps> = ({
 }) => {
   const scrollViewRef = useRef<any>(null);
 
+  const scrollToInitial = () => {
+    if (isRTL) {
+      scrollViewRef.current?.scrollToEnd({ animated: false });
+    } else {
+      scrollViewRef.current?.scrollTo({ x: 0, animated: false });
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(scrollToInitial, 30);
+    return () => clearTimeout(timer);
+  }, [isRTL]);
+
   return (
     <View style={styles.outerContainer}>
+      <View style={[styles.headerRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        <View style={[styles.titleWrap, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <Ionicons
+            name="wallet-outline"
+            size={13}
+            color={isDark ? '#38BDF8' : theme.primary}
+          />
+          <Text style={[styles.headerTitle, { color: theme.textSub }, fontSemiBold]}>
+            {isRTL ? 'انتخاب ارز' : 'Select Currency'}
+          </Text>
+        </View>
+
+        <View style={[styles.hintArrowsContainer, { flexDirection: 'row' }]}>
+          <Ionicons name="caret-back" size={11} color={theme.textMuted} />
+          <Text style={[styles.chipsHintScroll, { color: theme.textMuted }, fontRegular]}>
+            {isRTL ? 'ورق بزنید' : 'swipe'}
+          </Text>
+          <Ionicons name="caret-forward" size={11} color={theme.textMuted} />
+        </View>
+      </View>
+
       <ScrollView
         ref={scrollViewRef}
         horizontal
         showsHorizontalScrollIndicator={false}
+        onContentSizeChange={scrollToInitial}
         contentContainerStyle={[
           styles.scrollContent,
           { flexDirection: isRTL ? 'row-reverse' : 'row' },
@@ -67,19 +102,22 @@ export const CurrencySelector: React.FC<CurrencySelectorProps> = ({
               style={[
                 styles.currencyPill,
                 {
+                  flexDirection: isRTL ? 'row-reverse' : 'row',
                   backgroundColor: isActive
                     ? isDark
-                      ? 'rgba(56, 189, 248, 0.16)'
+                      ? '#162235'
                       : '#EEF2FF'
                     : isDark
                     ? '#111827'
                     : '#FFFFFF',
                   borderColor: isActive
-                    ? theme.activeBorder
+                    ? isDark
+                      ? '#38BDF8'
+                      : theme.activeBorder
+                    : isDark
+                    ? '#1F2937'
                     : theme.cardBorder,
                   borderWidth: isActive ? 1.5 : 1,
-                  shadowColor: isActive ? theme.primary : '#000',
-                  shadowOpacity: isActive ? 0.2 : 0.04,
                 },
               ]}
             >
@@ -90,7 +128,7 @@ export const CurrencySelector: React.FC<CurrencySelectorProps> = ({
                   {
                     backgroundColor: isActive
                       ? isDark
-                        ? 'rgba(56, 189, 248, 0.25)'
+                        ? '#1E3A5F'
                         : 'rgba(79, 70, 229, 0.15)'
                       : theme.chipBg,
                   },
@@ -138,8 +176,8 @@ export const CurrencySelector: React.FC<CurrencySelectorProps> = ({
                     >
                       <Ionicons
                         name="pencil"
-                        size={11}
-                        color={isActive ? theme.primary : theme.textMuted}
+                        size={10}
+                        color={isActive ? (isDark ? '#38BDF8' : theme.primary) : theme.textMuted}
                       />
                     </TouchableOpacity>
                   )}
@@ -157,18 +195,6 @@ export const CurrencySelector: React.FC<CurrencySelectorProps> = ({
                   {isRTL ? currency.name.fa : currency.name.en}
                 </Text>
               </View>
-
-              {/* Active Indicator Pip */}
-              {isActive && (
-                <View
-                  style={[
-                    styles.activePip,
-                    {
-                      backgroundColor: isDark ? '#38BDF8' : theme.primary,
-                    },
-                  ]}
-                />
-              )}
             </TouchableOpacity>
           );
         })}
@@ -221,77 +247,99 @@ export const CurrencySelector: React.FC<CurrencySelectorProps> = ({
 
 const styles = StyleSheet.create({
   outerContainer: {
-    marginVertical: 10,
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  headerRow: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 7,
+  },
+  titleWrap: {
+    alignItems: 'center',
+    gap: 5,
+  },
+  headerTitle: {
+    fontSize: 12,
+  },
+  hintArrowsContainer: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  chipsHintScroll: {
+    fontSize: 11,
   },
   scrollContent: {
     paddingHorizontal: 16,
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
+    flexDirection: 'row',
   },
   currencyPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 11,
-    borderRadius: 14,
-    gap: 8,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 5,
-    elevation: 2,
-    position: 'relative',
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    gap: 7,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 1 },
+        shadowRadius: 3,
+        shadowOpacity: 0.1,
+      },
+      android: {
+        elevation: 0,
+      },
+    }),
   },
   symbolCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   symbolText: {
-    fontSize: 13,
+    fontSize: 11,
   },
   codeWrap: {
     justifyContent: 'center',
   },
   codeRow: {
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   codeText: {
-    fontSize: 13,
-    letterSpacing: 0.3,
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
   subNameText: {
-    fontSize: 10,
+    fontSize: 9.5,
     marginTop: -1,
-    maxWidth: 75,
+    maxWidth: 70,
   },
   customEditIcon: {
-    padding: 2,
-  },
-  activePip: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    marginLeft: 2,
+    padding: 1,
   },
   addPill: {
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',
-    gap: 6,
+    gap: 5,
   },
   addIconCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addText: {
-    fontSize: 12,
+    fontSize: 11,
   },
 });

@@ -1,6 +1,6 @@
 {
   "name": "chand-mishe",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "license": "UNLICENSED",
   "main": "index.js",
   "dependencies": {
@@ -23,7 +23,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "npx tsx src/tests/multi-currency.test.ts"
   },
   "private": true,
   "devDependencies": {

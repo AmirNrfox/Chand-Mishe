@@ -1,7 +1,7 @@
 {
-  "version": "1.0.1",
-  "versionCode": 2,
-  "releaseNotes": "لوگوی رسمی جدید (مونومارک کریستالی «چ» با سکه‌های درخشان دلار، تتر و تومان)، قابلیت دانلود مستقیم و درون‌برنامه‌ای آپدیت‌ها با نوار پیشرفت و نصب خودکار، اصلاح چیدمان راست‌چین مودال به‌روزرسانی و رفع باگ ذخیره چندباره در تاریخچه.",
-  "releaseNotesEn": "New official 3D crystal monogram icon with radiant coins, in-app direct APK downloader with real-time progress and auto-installer, Persian RTL update modal layout fix, and history duplicate calculation fix.",
+  "version": "1.1.0",
+  "versionCode": 3,
+  "releaseNotes": "پشتیبانی کامل از چند ارز (یورو، درهم، لیر، دینار و ارزهای دلخواه)، گرد کردن دقیق و ریاضی مبالغ تومان (بدون اعشار)، بازیابی تاریخچه ارزهای حذف‌شده، نمایش مبالغ خرد پرکاربرد زیر ورودی، بهبود چشمگیر چیدمان و ثبات هدر و فوتر مونوکروم.",
+  "releaseNotesEn": "Full multi-currency support (EUR, AED, TRY, IQD, and custom currencies), strict integer-rounded Toman formatting (Math.round), historical snapshot recovery for deleted custom currencies, inline quick retail amounts below inputs, refined header spacing, and elegant monochrome footer.",
   "downloadUrl": "https://github.com/AmirNrfox/Chand-Mishe/releases/latest"
 }

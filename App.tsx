@@ -19,7 +19,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
-import { Ionicons, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   useFonts,
@@ -32,6 +32,7 @@ import {
   Currency,
   CurrencyId,
   HistoryRecord,
+  HistoricalCurrencySnapshot,
   DEFAULT_CURRENCIES,
   STORAGE_KEYS,
   CURRENT_MIGRATION_VERSION,
@@ -41,6 +42,10 @@ import {
   convertTomanToForeign,
   migrateLegacyHistory,
   migrateRates,
+  safeParseJson,
+  resolveHistoricalRate,
+  getDeletedCurrencySnapshot,
+  formatToman,
 } from './src/types/currency';
 import { CurrencySelector } from './src/components/CurrencySelector';
 import { CustomCurrencyModal } from './src/components/CustomCurrencyModal';
@@ -50,7 +55,7 @@ const THEME_STORAGE_KEY = '@chand_mishe_theme';
 const LANG_STORAGE_KEY = '@chand_mishe_lang';
 const HISTORY_STORAGE_KEY = '@chand_mishe_history';
 
-const CURRENT_APP_VERSION = '1.0.1';
+const CURRENT_APP_VERSION = '1.1.0';
 const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/AmirNrfox/Chand-Mishe/main/version.json';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/AmirNrfox/Chand-Mishe/releases/latest';
 
@@ -66,7 +71,7 @@ type UpdateInfo = {
 const translations = {
   fa: {
     appTitle: 'چند میشه؟',
-    appSubtitle: 'محاسبه گر قیمت دلار و تومان',
+    appSubtitle: 'تبدیل گر قیمت ارز',
     rateLabel: 'نرخ ۱ دلار یا تتر:',
     rateUnit: 'تومان',
     fetchLiveRate: 'دریافت نرخ تتر',
@@ -74,7 +79,7 @@ const translations = {
     rateFetchError: 'خطا در دریافت نرخ تتر',
     cooldownWait: 'ثانیه صبر',
     inputTag: 'ورودی',
-    usdTitle: 'مبلغ به دلار',
+    usdTitle: 'مبلغ به دلار / تتر',
     tomanTitle: 'مبلغ به تومان',
     usdPlaceholder: '0.5 یا 19.99',
     tomanPlaceholder: '1,000,000',
@@ -84,9 +89,9 @@ const translations = {
     historyTitle: 'آخرین محاسبات:',
     symbolToman: 'ت',
     usdUnit: 'دلار',
-    appVersion: 'نسخه ۱.۰.۱',
+    appVersion: 'نسخه ۱.۱.۰',
     aboutTitle: 'درباره برنامه',
-    aboutDesc: 'ابزاری سبک و سریع برای محاسبه قیمت خرید های دلاری شما به تومان یا بالعکس بر اساس نرخ آنلاین یا دستی',
+    aboutDesc: 'ابزاری سبک، دقیق و سریع برای محاسبه قیمت انواع ارزها (دلار، یورو، درهم، لیر، دینار و ارزهای دلخواه) به تومان یا بالعکس بر اساس نرخ آنلاین و دستی!',
     devBy: 'طراحی و توسعه توسط امیرعلی نظری',
     footerDevPrefix: 'طراحی و توسعه توسط',
     authorName: 'امیرعلی نظری',
@@ -113,7 +118,7 @@ const translations = {
   },
   en: {
     appTitle: 'Chand Mishe?',
-    appSubtitle: 'USD & Toman Price Converter',
+    appSubtitle: 'Multi-Currency Converter',
     rateLabel: '1 USD / USDT Rate:',
     rateUnit: 'Toman',
     fetchLiveRate: 'Get USDT Rate',
@@ -121,7 +126,7 @@ const translations = {
     rateFetchError: 'Failed to fetch USDT rate',
     cooldownWait: 's wait',
     inputTag: 'INPUT',
-    usdTitle: 'Amount in USD',
+    usdTitle: 'Amount in USD / USDT',
     tomanTitle: 'Amount in Toman',
     usdPlaceholder: '0.5 or 19.99',
     tomanPlaceholder: '1,000,000',
@@ -131,9 +136,9 @@ const translations = {
     historyTitle: 'Recent Conversions:',
     symbolToman: 'TM',
     usdUnit: 'USD',
-    appVersion: 'Version 1.0.1',
+    appVersion: 'Version 1.1.0',
     aboutTitle: 'About App',
-    aboutDesc: 'A lightweight and fast tool to calculate your USD purchase prices in Toman or vice versa based on live or custom rates',
+    aboutDesc: 'A fast, lightweight, and reliable tool to calculate real-world prices of global and custom currencies (USD, EUR, AED, TRY, IQD, etc.) to Toman and vice versa with live or custom rates!',
     devBy: 'Designed and Developed by AmirAli Nazari',
     footerDevPrefix: 'Designed and developed by',
     authorName: 'AmirAli Nazari',
@@ -288,6 +293,7 @@ export default function App() {
     VazirSemiBold: Vazirmatn_600SemiBold,
     VazirBold: Vazirmatn_700Bold,
     VazirBlack: Vazirmatn_800ExtraBold,
+    ...Ionicons.font,
   });
 
   const [isDark, setIsDark] = useState<boolean>(true);
@@ -298,6 +304,7 @@ export default function App() {
   const [direction, setDirection] = useState<'USD_TO_TOMAN' | 'TOMAN_TO_USD'>('USD_TO_TOMAN');
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [activeCurrencyId, setActiveCurrencyId] = useState<CurrencyId>('usd');
+  const [historicalCurrencySnapshot, setHistoricalCurrencySnapshot] = useState<HistoricalCurrencySnapshot | null>(null);
   const [customCurrencies, setCustomCurrencies] = useState<Currency[]>([]);
   const [ratesById, setRatesById] = useState<Record<string, string>>({});
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
@@ -323,8 +330,26 @@ export default function App() {
   const [isCustomModalOpen, setIsCustomModalOpen] = useState<boolean>(false);
   const [currencyToEdit, setCurrencyToEdit] = useState<Currency | null>(null);
 
+  const ratesByIdRef = useRef<Record<string, string>>({});
+  const activeCurrencyIdRef = useRef<string>(activeCurrencyId);
+  const liveFetchRequestIdRef = useRef<number>(0);
+  const quickAmountsScrollRef = useRef<any>(null);
+
+  ratesByIdRef.current = ratesById;
+  activeCurrencyIdRef.current = activeCurrencyId;
+
   const allCurrencies = [...DEFAULT_CURRENCIES, ...customCurrencies];
   const activeCurrency = allCurrencies.find((c) => c.id === activeCurrencyId) || DEFAULT_CURRENCIES[0];
+
+  const displaySymbol = historicalCurrencySnapshot
+    ? historicalCurrencySnapshot.symbol
+    : activeCurrency.symbol;
+  const displayName = historicalCurrencySnapshot
+    ? historicalCurrencySnapshot.name
+    : activeCurrency.name;
+  const displayCode = historicalCurrencySnapshot
+    ? historicalCurrencySnapshot.code
+    : activeCurrency.code;
 
   const t = isDark ? themes.dark : themes.light;
   const tr = translations[lang];
@@ -333,6 +358,19 @@ export default function App() {
   const fontSemiBold = fontsLoaded ? { fontFamily: 'VazirSemiBold' } : {};
   const fontBold = fontsLoaded ? { fontFamily: 'VazirBold' } : {};
   const fontBlack = fontsLoaded ? { fontFamily: 'VazirBlack' } : {};
+
+  const scrollToQuickInitial = () => {
+    if (isRTL) {
+      quickAmountsScrollRef.current?.scrollToEnd({ animated: false });
+    } else {
+      quickAmountsScrollRef.current?.scrollTo({ x: 0, animated: false });
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(scrollToQuickInitial, 30);
+    return () => clearTimeout(timer);
+  }, [isRTL, activeCurrencyId]);
 
   useEffect(() => {
     loadSavedData();
@@ -352,60 +390,114 @@ export default function App() {
 
   const loadSavedData = async () => {
     try {
-      const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-      if (savedTheme) setIsDark(savedTheme === 'dark');
+      try {
+        const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        if (savedTheme) setIsDark(savedTheme === 'dark');
+      } catch (e) {
+        console.error('Error loading theme', e);
+      }
 
-      const savedLang = (await AsyncStorage.getItem(LANG_STORAGE_KEY)) as Language | null;
-      if (savedLang) setLang(savedLang);
+      try {
+        const savedLang = (await AsyncStorage.getItem(LANG_STORAGE_KEY)) as Language | null;
+        if (savedLang) setLang(savedLang);
+      } catch (e) {
+        console.error('Error loading lang', e);
+      }
 
       // 1. Migration check (Idempotent execution with version key)
-      const migrationVersionStr = await AsyncStorage.getItem(STORAGE_KEYS.MIGRATION_VERSION);
-      const migrationVersion = migrationVersionStr ? parseInt(migrationVersionStr, 10) : 0;
+      let migrationVersion = 0;
+      try {
+        const migrationVersionStr = await AsyncStorage.getItem(STORAGE_KEYS.MIGRATION_VERSION);
+        migrationVersion = migrationVersionStr ? parseInt(migrationVersionStr, 10) : 0;
+      } catch (e) {
+        console.error('Error reading migration version', e);
+      }
 
-      // 2. Load rates map, custom currencies and active currency ID
-      const rawRates = await AsyncStorage.getItem(STORAGE_KEYS.RATES_BY_ID);
-      let ratesMap: Record<string, string> = rawRates ? JSON.parse(rawRates) : {};
+      // 2. Load rates map safely (Audit Fix 3)
+      let ratesMap: Record<string, string> = {};
+      let isRatesCorrupt = false;
+      try {
+        const rawRates = await AsyncStorage.getItem(STORAGE_KEYS.RATES_BY_ID);
+        const parsed = safeParseJson<Record<string, string>>(rawRates, {});
+        if (parsed.success && typeof parsed.data === 'object' && parsed.data !== null && !Array.isArray(parsed.data)) {
+          ratesMap = parsed.data;
+        } else if (rawRates) {
+          isRatesCorrupt = true;
+          console.warn('Rates in storage are corrupt; preserving raw data without overwriting');
+        }
+      } catch (e) {
+        console.error('Error loading rates map', e);
+      }
 
-      const rawCustom = await AsyncStorage.getItem(STORAGE_KEYS.CUSTOM_CURRENCIES);
-      const customList: Currency[] = rawCustom ? JSON.parse(rawCustom) : [];
+      // 3. Load custom currencies safely (Audit Fix 3)
+      let customList: Currency[] = [];
+      let isCustomCorrupt = false;
+      try {
+        const rawCustom = await AsyncStorage.getItem(STORAGE_KEYS.CUSTOM_CURRENCIES);
+        const parsed = safeParseJson<Currency[]>(rawCustom, []);
+        if (parsed.success && Array.isArray(parsed.data)) {
+          customList = parsed.data.filter(
+            (c) => c && typeof c === 'object' && typeof c.id === 'string' && c.isCustom
+          );
+        } else if (rawCustom) {
+          isCustomCorrupt = true;
+          console.warn('Custom currencies in storage are corrupt; preserving raw data without overwriting');
+        }
+      } catch (e) {
+        console.error('Error loading custom currencies', e);
+      }
       setCustomCurrencies(customList);
 
-      const savedActiveId = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_CURRENCY_ID);
-      const currentActiveId = savedActiveId || 'usd';
-      setActiveCurrencyId(currentActiveId);
-
-      // 3. Load & migrate history
-      const savedHist = await AsyncStorage.getItem(STORAGE_KEYS.HISTORY);
-      let historyList: HistoryRecord[] = [];
-      if (savedHist) {
-        try {
-          const parsed = JSON.parse(savedHist);
-          const { records } = migrateLegacyHistory(parsed);
-          historyList = records;
-        } catch (e) {
-          console.error('Error parsing history', e);
+      // 4. Validate active currency ID against available currencies (Audit Fix 4)
+      let currentActiveId = 'usd';
+      try {
+        const savedActiveId = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_CURRENCY_ID);
+        const allAvailable = [...DEFAULT_CURRENCIES, ...customList];
+        if (savedActiveId && allAvailable.some((c) => c.id === savedActiveId)) {
+          currentActiveId = savedActiveId;
         }
+      } catch (e) {
+        console.error('Error loading active currency ID', e);
+      }
+      setActiveCurrencyId(currentActiveId);
+      activeCurrencyIdRef.current = currentActiveId;
+
+      // 5. Load & migrate history safely (Audit Fix 3)
+      let historyList: HistoryRecord[] = [];
+      try {
+        const savedHist = await AsyncStorage.getItem(STORAGE_KEYS.HISTORY);
+        const parsed = safeParseJson<unknown[]>(savedHist, []);
+        if (parsed.success && Array.isArray(parsed.data)) {
+          const { records } = migrateLegacyHistory(parsed.data);
+          historyList = records;
+        }
+      } catch (e) {
+        console.error('Error loading history', e);
       }
       setHistory(historyList);
 
-      // 4. If migration needed (version < CURRENT_MIGRATION_VERSION):
-      if (migrationVersion < CURRENT_MIGRATION_VERSION) {
-        const legacyRate = await AsyncStorage.getItem(STORAGE_KEYS.LEGACY_USD_RATE);
-        const { rates: migratedRates } = migrateRates(legacyRate, ratesMap);
-        ratesMap = migratedRates;
+      // 6. Migration execution (only if rates were not corrupt)
+      if (migrationVersion < CURRENT_MIGRATION_VERSION && !isRatesCorrupt && !isCustomCorrupt) {
+        try {
+          const legacyRate = await AsyncStorage.getItem(STORAGE_KEYS.LEGACY_USD_RATE);
+          const { rates: migratedRates } = migrateRates(legacyRate, ratesMap);
+          ratesMap = migratedRates;
 
-        // Perform safe atomic multiSet
-        await AsyncStorage.multiSet([
-          [STORAGE_KEYS.MIGRATION_VERSION, CURRENT_MIGRATION_VERSION.toString()],
-          [STORAGE_KEYS.RATES_BY_ID, JSON.stringify(ratesMap)],
-          [STORAGE_KEYS.HISTORY, JSON.stringify(historyList)],
-          [STORAGE_KEYS.ACTIVE_CURRENCY_ID, currentActiveId],
-        ]);
+          await AsyncStorage.multiSet([
+            [STORAGE_KEYS.MIGRATION_VERSION, CURRENT_MIGRATION_VERSION.toString()],
+            [STORAGE_KEYS.RATES_BY_ID, JSON.stringify(ratesMap)],
+            [STORAGE_KEYS.HISTORY, JSON.stringify(historyList)],
+            [STORAGE_KEYS.ACTIVE_CURRENCY_ID, currentActiveId],
+          ]);
+        } catch (e) {
+          console.error('Error executing migration', e);
+        }
       }
 
       setRatesById(ratesMap);
+      ratesByIdRef.current = ratesMap;
 
-      // 5. Populate initial rate for active currency (isolated per currency)
+      // 7. Populate initial rate for active currency
       const activeRate = ratesMap[currentActiveId] || '';
       if (activeRate) {
         setRateText(formatIntegerWithCommas(activeRate));
@@ -413,7 +505,7 @@ export default function App() {
         setRateText('');
       }
     } catch (e) {
-      console.error('Error loading data', e);
+      console.error('Fatal error loading data', e);
     }
   };
 
@@ -434,17 +526,23 @@ export default function App() {
     return parsed !== null ? parsed : 0;
   };
 
-  const handleRateChange = async (val: string) => {
+  const handleRateChange = async (val: string, targetCurrencyId?: string) => {
+    const targetId = targetCurrencyId || activeCurrencyIdRef.current;
     const raw = cleanDigits(val).replace(/[^0-9]/g, '');
     const formatted = formatIntegerWithCommas(raw);
-    setRateText(formatted);
 
-    const updatedRates = { ...ratesById };
-    if (raw) {
-      updatedRates[activeCurrencyId] = raw;
-    } else {
-      delete updatedRates[activeCurrencyId];
+    if (targetId === activeCurrencyIdRef.current) {
+      setRateText(formatted);
     }
+
+    // Always read from ratesByIdRef to avoid stale closure (Audit Fix 5)
+    const updatedRates = { ...ratesByIdRef.current };
+    if (raw) {
+      updatedRates[targetId] = raw;
+    } else {
+      delete updatedRates[targetId];
+    }
+    ratesByIdRef.current = updatedRates;
     setRatesById(updatedRates);
 
     try {
@@ -452,13 +550,13 @@ export default function App() {
         const pairs: [string, string][] = [
           [STORAGE_KEYS.RATES_BY_ID, JSON.stringify(updatedRates)],
         ];
-        if (activeCurrencyId === 'usd') {
+        if (targetId === 'usd') {
           pairs.push([STORAGE_KEYS.LEGACY_USD_RATE, raw]);
         }
         await AsyncStorage.multiSet(pairs);
       } else {
         await AsyncStorage.setItem(STORAGE_KEYS.RATES_BY_ID, JSON.stringify(updatedRates));
-        if (activeCurrencyId === 'usd') {
+        if (targetId === 'usd') {
           await AsyncStorage.removeItem(STORAGE_KEYS.LEGACY_USD_RATE);
         }
       }
@@ -483,7 +581,8 @@ export default function App() {
   };
 
   const handleSelectCurrency = async (curr: Currency) => {
-    if (curr.id === activeCurrencyId) return;
+    setHistoricalCurrencySnapshot(null);
+    if (curr.id === activeCurrencyIdRef.current) return;
 
     if (historyDebounceRef.current) {
       clearTimeout(historyDebounceRef.current);
@@ -496,8 +595,9 @@ export default function App() {
     setRateStatusMessage('');
 
     setActiveCurrencyId(curr.id);
+    activeCurrencyIdRef.current = curr.id;
 
-    const savedRate = ratesById[curr.id] || '';
+    const savedRate = ratesByIdRef.current[curr.id] || '';
     if (savedRate) {
       setRateText(formatIntegerWithCommas(savedRate));
     } else {
@@ -512,11 +612,13 @@ export default function App() {
   };
 
   const handleOpenAddCustomCurrency = () => {
+    setHistoricalCurrencySnapshot(null);
     setCurrencyToEdit(null);
     setIsCustomModalOpen(true);
   };
 
   const handleOpenEditCustomCurrency = (curr: Currency) => {
+    setHistoricalCurrencySnapshot(null);
     setCurrencyToEdit(curr);
     setIsCustomModalOpen(true);
   };
@@ -532,15 +634,17 @@ export default function App() {
     }
     setCustomCurrencies(updatedList);
 
-    const updatedRates = { ...ratesById };
+    const updatedRates = { ...ratesByIdRef.current };
     if (rate) {
       updatedRates[savedCurrency.id] = rate;
     } else {
       delete updatedRates[savedCurrency.id];
     }
+    ratesByIdRef.current = updatedRates;
     setRatesById(updatedRates);
 
     setActiveCurrencyId(savedCurrency.id);
+    activeCurrencyIdRef.current = savedCurrency.id;
     setRateText(rate ? formatIntegerWithCommas(rate) : '');
     setUsdInput('');
     setTomanInput('');
@@ -557,17 +661,22 @@ export default function App() {
   };
 
   const handleDeleteCustomCurrency = async (currencyId: string) => {
+    if (historicalCurrencySnapshot?.id === currencyId) {
+      setHistoricalCurrencySnapshot(null);
+    }
     const updatedList = customCurrencies.filter((c) => c.id !== currencyId);
     setCustomCurrencies(updatedList);
 
-    const updatedRates = { ...ratesById };
+    const updatedRates = { ...ratesByIdRef.current };
     delete updatedRates[currencyId];
+    ratesByIdRef.current = updatedRates;
     setRatesById(updatedRates);
 
-    let nextActiveId = activeCurrencyId;
-    if (activeCurrencyId === currencyId) {
+    let nextActiveId = activeCurrencyIdRef.current;
+    if (activeCurrencyIdRef.current === currencyId) {
       nextActiveId = 'usd';
       setActiveCurrencyId('usd');
+      activeCurrencyIdRef.current = 'usd';
       const usdRate = updatedRates['usd'] || '';
       setRateText(usdRate ? formatIntegerWithCommas(usdRate) : '');
       setUsdInput('');
@@ -586,6 +695,11 @@ export default function App() {
   };
 
   const getForeignCurrencyTitle = () => {
+    if (historicalCurrencySnapshot) {
+      return isRTL
+        ? `مبلغ به ${historicalCurrencySnapshot.name.fa}`
+        : `Amount in ${historicalCurrencySnapshot.name.en}`;
+    }
     if (lang === 'fa') {
       switch (activeCurrency.id) {
         case 'usd':
@@ -620,6 +734,9 @@ export default function App() {
   };
 
   const getForeignPlaceholder = () => {
+    if (historicalCurrencySnapshot) {
+      return `${historicalCurrencySnapshot.symbol} 10`;
+    }
     if (activeCurrency.id === 'usd') {
       return tr.usdPlaceholder;
     }
@@ -630,6 +747,11 @@ export default function App() {
   };
 
   const getRateCardLabel = () => {
+    if (historicalCurrencySnapshot) {
+      return isRTL
+        ? `نرخ تاریخی ۱ ${historicalCurrencySnapshot.name.fa}:`
+        : `Historical 1 ${historicalCurrencySnapshot.name.en} Rate:`;
+    }
     if (activeCurrency.id === 'usd') {
       return tr.rateLabel;
     }
@@ -637,6 +759,11 @@ export default function App() {
   };
 
   const getRateCardBadgeText = () => {
+    if (historicalCurrencySnapshot) {
+      return isRTL
+        ? `${historicalCurrencySnapshot.symbol} ۱ / ${historicalCurrencySnapshot.code}`
+        : `${historicalCurrencySnapshot.symbol} 1 / ${historicalCurrencySnapshot.code}`;
+    }
     if (activeCurrency.id === 'usd') {
       return isRTL ? '$ ۱ / تتر' : '$ 1 / USDT';
     }
@@ -646,7 +773,12 @@ export default function App() {
   };
 
   const fetchLiveRate = async () => {
-    if (isLoadingRate || cooldownSeconds > 0) return;
+    // Audit Fix 2: Explicit guard - only USD is eligible
+    if (isLoadingRate || cooldownSeconds > 0 || activeCurrencyIdRef.current !== 'usd') return;
+
+    const reqId = Date.now();
+    liveFetchRequestIdRef.current = reqId;
+    const reqCurrencyId = activeCurrencyIdRef.current;
 
     setIsLoadingRate(true);
     setRateStatusMessage('');
@@ -683,9 +815,18 @@ export default function App() {
         }
       }
 
+      // Audit Fix 2: Check race condition after async fetch
+      if (
+        liveFetchRequestIdRef.current !== reqId ||
+        activeCurrencyIdRef.current !== reqCurrencyId
+      ) {
+        // User switched currency or newer request was initiated; discard response
+        return;
+      }
+
       if (price && price > 0) {
         const priceStr = price.toString();
-        await handleRateChange(priceStr);
+        await handleRateChange(priceStr, 'usd');
         setRateStatusType('success');
         setCooldownSeconds(30);
         const timeStr = new Date().toLocaleTimeString(lang === 'fa' ? 'fa-IR' : 'en-US', {
@@ -907,7 +1048,7 @@ export default function App() {
 
     if (isNaN(numUsd) || numUsd <= 0 || isNaN(numToman) || numToman <= 0) return;
 
-    const formattedToman = formatWithCommas(numToman, 2);
+    const formattedToman = formatToman(numToman);
     const item: HistoryRecord = {
       id: Date.now().toString(),
       timestamp: Date.now(),
@@ -917,6 +1058,7 @@ export default function App() {
       currencyId: activeCurrency.id,
       currencyCode: activeCurrency.code,
       currencySymbol: activeCurrency.symbol,
+      currencyName: activeCurrency.name,
       usd: cleanUsd,
       toman: formattedToman,
     };
@@ -973,9 +1115,9 @@ export default function App() {
     const foreign = parseFloat(clean);
     const converted = !isNaN(foreign) ? convertForeignToToman(foreign, rate) : null;
     if (converted !== null) {
-      const res = formatWithCommas(converted, 2);
+      const res = formatToman(converted);
       setTomanInput(res);
-      if (save) {
+      if (save && !historicalCurrencySnapshot) {
         scheduleSaveHistory(clean, res);
       }
     } else {
@@ -1011,8 +1153,8 @@ export default function App() {
     if (converted !== null) {
       const res = converted < 1 ? converted.toFixed(4).replace(/\.?0+$/, '') : converted.toFixed(2);
       setUsdInput(res);
-      if (save) {
-        scheduleSaveHistory(res, formatIntegerWithCommas(clean));
+      if (save && !historicalCurrencySnapshot) {
+        scheduleSaveHistory(res, formatToman(clean));
       }
     } else {
       setUsdInput('');
@@ -1021,7 +1163,7 @@ export default function App() {
 
   const handleTomanChange = (text: string) => {
     const raw = cleanDigits(text).replace(/[^0-9]/g, '');
-    const formatted = formatIntegerWithCommas(raw);
+    const formatted = formatToman(raw);
     setTomanInput(formatted);
     calcFromToman(raw);
   };
@@ -1039,6 +1181,7 @@ export default function App() {
       clearTimeout(historyDebounceRef.current);
       historyDebounceRef.current = null;
     }
+    setHistoricalCurrencySnapshot(null);
     setUsdInput('');
     setTomanInput('');
   };
@@ -1071,20 +1214,27 @@ export default function App() {
           ]}
         >
           <View style={[styles.topBar, { flexDirection }]}>
-            <View style={[styles.brandContainer, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-              <View style={[styles.titleRow, { flexDirection }]}>
-                <Image
-                  source={require('./assets/icon.png')}
-                  style={styles.modernAppLogoWrap}
-                  resizeMode="cover"
-                />
+            <View style={[styles.brandContainer, { flexDirection }]}>
+              <Image
+                source={require('./assets/icon.png')}
+                style={styles.modernAppLogoWrap}
+                resizeMode="cover"
+              />
+              <View style={[styles.titleCol, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                 <Text style={[styles.appTitle, { color: t.textMain }, fontBlack]}>
                   {tr.appTitle}
                 </Text>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.appSubtitle,
+                    { color: t.textSub, textAlign: isRTL ? 'right' : 'left' },
+                    fontRegular,
+                  ]}
+                >
+                  {tr.appSubtitle}
+                </Text>
               </View>
-              <Text style={[styles.appSubtitle, { color: t.textSub }, fontRegular]}>
-                {tr.appSubtitle}
-              </Text>
             </View>
             <View style={[styles.headerActions, { flexDirection }]}>
               <TouchableOpacity
@@ -1167,7 +1317,23 @@ export default function App() {
                 </Text>
               </View>
 
-              {activeCurrency.id === 'usd' ? (
+              {historicalCurrencySnapshot ? (
+                <View
+                  style={[
+                    styles.manualRateBadge,
+                    {
+                      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                      borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                    },
+                  ]}
+                >
+                  <Ionicons name="time-outline" size={13} color={isDark ? '#F87171' : '#DC2626'} />
+                  <Text style={[styles.manualRateText, { color: isDark ? '#FCA5A5' : '#DC2626' }, fontSemiBold]}>
+                    {isRTL ? 'نرخ تاریخی' : 'Historical Rate'}
+                  </Text>
+                </View>
+              ) : activeCurrency.id === 'usd' ? (
                 <TouchableOpacity
                   onPress={fetchLiveRate}
                   disabled={isLoadingRate || cooldownSeconds > 0}
@@ -1230,7 +1396,7 @@ export default function App() {
                 >
                   <Ionicons name="bookmark-outline" size={13} color={t.textMuted} />
                   <Text style={[styles.manualRateText, { color: t.textSub }, fontSemiBold]}>
-                    {isRTL ? 'نرخ ذخیره‌شده' : 'Saved Rate'}
+                    {isRTL ? 'نرخ ذخیره شده' : 'Saved Rate'}
                   </Text>
                 </View>
               )}
@@ -1350,7 +1516,7 @@ export default function App() {
                       fontBold,
                     ]}
                   >
-                    {isUsdSource ? activeCurrency.symbol : tr.symbolToman}
+                    {isUsdSource ? displaySymbol : tr.symbolToman}
                   </Text>
                 </View>
 
@@ -1381,6 +1547,91 @@ export default function App() {
                   </TouchableOpacity>
                 )}
               </View>
+
+              {isUsdSource && !historicalCurrencySnapshot && activeCurrency.quickAmounts && activeCurrency.quickAmounts.length > 0 && (
+                <View style={styles.inlineQuickWrapper}>
+                  <View style={[styles.inlineQuickHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                    <View style={[styles.inlineQuickTitleWrap, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                      <Ionicons name="flash-outline" size={11} color={t.accentGreen} />
+                      <Text style={[styles.inlineQuickTitleText, { color: t.textSub }, fontSemiBold]}>
+                        {isRTL ? 'مبالغ پرکاربرد' : 'Quick Amounts'}
+                      </Text>
+                    </View>
+                    <View style={styles.inlineQuickSwipeHint}>
+                      <Ionicons name="caret-back" size={10} color={t.textMuted} />
+                      <Text style={[styles.inlineQuickSwipeText, { color: t.textMuted }, fontRegular]}>
+                        {isRTL ? 'ورق بزنید' : 'swipe'}
+                      </Text>
+                      <Ionicons name="caret-forward" size={10} color={t.textMuted} />
+                    </View>
+                  </View>
+
+                  <ScrollView
+                    ref={quickAmountsScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    onContentSizeChange={scrollToQuickInitial}
+                    contentContainerStyle={[
+                      styles.inlineQuickScroll,
+                      { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                    ]}
+                  >
+                    {activeCurrency.quickAmounts.map((chip) => {
+                      const isSelected = usdInput === chip;
+                      return (
+                        <TouchableOpacity
+                          key={chip}
+                          style={[
+                            styles.inlineQuickChip,
+                            {
+                              backgroundColor: isSelected
+                                ? (isDark ? '#1E3A5F' : '#E0E7FF')
+                                : (isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9'),
+                              borderColor: isSelected
+                                ? (isDark ? '#38BDF8' : t.primary)
+                                : (isDark ? 'rgba(255, 255, 255, 0.10)' : '#CBD5E1'),
+                            },
+                          ]}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setUsdInput(chip);
+                            const rate = getRateNumber();
+                            if (rate > 0) {
+                              const converted = convertForeignToToman(parseFloat(chip), rate);
+                              if (converted !== null) {
+                                const res = formatToman(converted);
+                                setTomanInput(res);
+                                commitSaveHistory(chip, res);
+                              }
+                            } else {
+                              setTomanInput('');
+                            }
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.inlineQuickSymbol,
+                              { color: isSelected ? (isDark ? '#38BDF8' : t.primary) : t.accentGreen },
+                              fontBold,
+                            ]}
+                          >
+                            {activeCurrency.symbol}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.inlineQuickText,
+                              { color: isSelected ? (isDark ? '#38BDF8' : t.primary) : t.textMain },
+                              fontBold,
+                            ]}
+                          >
+                            {chip}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
             </View>
             <View style={styles.swapSection}>
               <View style={[styles.swapLine, { backgroundColor: t.divider }]} />
@@ -1453,7 +1704,7 @@ export default function App() {
                       fontBold,
                     ]}
                   >
-                    {!isUsdSource ? activeCurrency.symbol : tr.symbolToman}
+                    {!isUsdSource ? displaySymbol : tr.symbolToman}
                   </Text>
                 </View>
 
@@ -1473,68 +1724,50 @@ export default function App() {
                 </Text>
 
                 <Text style={[styles.unitLabel, { color: t.textSub }, fontSemiBold]}>
-                  {!isUsdSource ? (isRTL ? activeCurrency.name.fa : activeCurrency.code) : tr.rateUnit}
+                  {!isUsdSource ? (isRTL ? displayName.fa : displayCode) : tr.rateUnit}
                 </Text>
               </View>
             </View>
           </View>
-          <View style={[styles.chipsContainer, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
-            <View style={[styles.chipsHeadingRow, { flexDirection }]}>
-              <View style={[styles.chipsTitleWrap, { flexDirection }]}>
-                <Ionicons name="flash" size={15} color={t.accentGreen} />
-                <Text style={[styles.chipsHeading, { color: t.textMain }, fontBold]}>
-                  {' '}{tr.quickTitle}
-                </Text>
-              </View>
-              <View style={[styles.hintArrowsContainer, { flexDirection: 'row' }]}>
-                <Ionicons name="caret-back" size={12} color={t.textMuted} />
-                <Text style={[styles.chipsHintScroll, { color: t.textMuted }, fontRegular]}>
-                  {isRTL ? 'ورق بزنید' : 'swipe'}
-                </Text>
-                <Ionicons name="caret-forward" size={12} color={t.textMuted} />
-              </View>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={[
-                styles.chipsScrollRow,
-                { flexDirection: isRTL ? 'row-reverse' : 'row' },
+          {historicalCurrencySnapshot && (
+            <View
+              style={[
+                styles.deletedBannerContainer,
+                {
+                  backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                  borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+                  flexDirection,
+                },
               ]}
             >
-              {activeCurrency.quickAmounts.map((chip) => (
-                <TouchableOpacity
-                  key={chip}
-                  style={[
-                    styles.chipItemModern,
-                    { backgroundColor: t.chipBg, borderColor: t.chipBorder },
-                  ]}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    setDirection('USD_TO_TOMAN');
-                    setUsdInput(chip);
-                    const rate = getRateNumber();
-                    if (rate > 0) {
-                      const converted = convertForeignToToman(parseFloat(chip), rate);
-                      if (converted !== null) {
-                        const res = formatWithCommas(converted, 2);
-                        setTomanInput(res);
-                        commitSaveHistory(chip, res);
-                      }
-                    } else {
-                      setTomanInput('');
-                    }
-                  }}
-                >
-                  <Text style={[styles.chipSymbol, { color: t.accentGreen }, fontBold]}>
-                    {activeCurrency.symbol}
+              <View style={[styles.deletedBannerContent, { flexDirection }]}>
+                <Ionicons name="alert-circle-outline" size={18} color={isDark ? '#F87171' : '#DC2626'} />
+                <View style={{ marginHorizontal: 8, flex: 1 }}>
+                  <Text style={[styles.deletedBannerTitle, { color: isDark ? '#FCA5A5' : '#B91C1C' }, fontBold]}>
+                    {isRTL ? 'ارز حذف شده' : 'Deleted Currency'}
                   </Text>
-                  <Text style={[styles.chipTextModern, { color: t.textMain }, fontBold]}>{chip}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+                  <Text style={[styles.deletedBannerSubtitle, { color: isDark ? '#CBD5E1' : '#4B5563' }, fontRegular]}>
+                    {isRTL
+                      ? `نمایش رکورد تاریخی ${historicalCurrencySnapshot.name.fa} (${historicalCurrencySnapshot.code}). مبالغ سریع این ارز در دسترس نیست.`
+                      : `Viewing historical record of ${historicalCurrencySnapshot.name.en} (${historicalCurrencySnapshot.code}). Quick amounts are unavailable.`}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setHistoricalCurrencySnapshot(null);
+                  handleClear();
+                }}
+                style={styles.deletedBannerResetBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.deletedBannerResetText, { color: isDark ? '#FCA5A5' : '#DC2626' }, fontSemiBold]}>
+                  {isRTL ? 'بازگشت به ارز فعال' : 'Back to Active'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {history.length > 0 && (
             <View style={[styles.histCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
               <TouchableOpacity
@@ -1594,21 +1827,45 @@ export default function App() {
                         ]}
                         activeOpacity={0.7}
                         onPress={() => {
-                          if (h.currencyId && h.currencyId !== activeCurrencyId) {
-                            setActiveCurrencyId(h.currencyId);
-                            const savedRate = ratesById[h.currencyId] || h.rateApplied || '';
-                            if (savedRate) {
-                              setRateText(formatIntegerWithCommas(savedRate));
-                            }
-                            AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CURRENCY_ID, h.currencyId);
+                          // Clear any pending history debounce timer (Audit Fix 1)
+                          if (historyDebounceRef.current) {
+                            clearTimeout(historyDebounceRef.current);
+                            historyDebounceRef.current = null;
                           }
+
+                          // Historical Currency Snapshot Handling
+                          const deletedSnapshot = getDeletedCurrencySnapshot(h, allCurrencies);
+                          if (deletedSnapshot) {
+                            setHistoricalCurrencySnapshot(deletedSnapshot);
+                          } else {
+                            setHistoricalCurrencySnapshot(null);
+                            if (h.currencyId !== activeCurrencyIdRef.current) {
+                              setActiveCurrencyId(h.currencyId);
+                              activeCurrencyIdRef.current = h.currencyId;
+                              AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CURRENCY_ID, h.currencyId);
+                            }
+                          }
+
                           setDirection('USD_TO_TOMAN');
                           const val = h.foreignAmount || h.usd || '';
                           setUsdInput(val);
-                          const r =
-                            parseRate(ratesById[h.currencyId || activeCurrencyId] || h.rateApplied || rateText) ||
-                            getRateNumber();
-                          calcFromUsd(val, r);
+
+                          // Audit Fix 1: Priority MUST be h.rateApplied (historical rate applied), not current rate!
+                          const r = resolveHistoricalRate(
+                            h.rateApplied,
+                            ratesByIdRef.current[h.currencyId || activeCurrencyIdRef.current] || rateText
+                          );
+
+                          if (r !== null && r > 0) {
+                            setRateText(formatIntegerWithCommas(r.toString()));
+                          }
+
+                          // Audit Fix 1: Directly restore exact historical tomanAmount; calculate with save: false if needed
+                          if (h.tomanAmount || h.toman) {
+                            setTomanInput(formatToman(h.tomanAmount || h.toman));
+                          } else if (r !== null && r > 0) {
+                            calcFromUsd(val, r, false);
+                          }
                         }}
                       >
                         <View style={[styles.histUsdCol, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
@@ -1636,7 +1893,7 @@ export default function App() {
 
                         <View style={[styles.histTomanCol, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
                           <Text style={[styles.histToman, { color: t.primary }, fontBold]}>
-                            {h.tomanAmount || h.toman} {tr.rateUnit}
+                            {formatToman(h.tomanAmount || h.toman)} {tr.rateUnit}
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -1646,15 +1903,26 @@ export default function App() {
               )}
             </View>
           )}
-          <View style={[styles.footerContainer, { flexDirection }]}>
+        </ScrollView>
+
+        <View
+          style={[
+            styles.footerContainer,
+            {
+              backgroundColor: t.bg,
+              borderTopColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)',
+            },
+          ]}
+        >
+          <Text style={styles.footerLine}>
             <Text style={[styles.footerTextMuted, { color: t.textMuted }, fontRegular]}>
               {tr.footerDevPrefix}{' '}
             </Text>
-            <Text style={[styles.footerAuthor, { color: t.textMain }, fontBold]}>
+            <Text style={[styles.footerAuthor, { color: isDark ? '#FFFFFF' : '#000000' }, fontBold]}>
               {tr.authorName}
             </Text>
-          </View>
-        </ScrollView>
+          </Text>
+        </View>
       </KeyboardAvoidingView>
 
       <CustomCurrencyModal
@@ -1789,7 +2057,7 @@ export default function App() {
                   activeOpacity={0.7}
                   onPress={() => Linking.openURL('https://t.me/AmirAliNazari2001')}
                 >
-                  <FontAwesome name="telegram" size={17} color="#229ED9" />
+                  <Ionicons name="paper-plane" size={16} color="#229ED9" />
                   <Text style={[styles.modalSocialText, { color: t.textMain }, fontSemiBold]}>
                     {tr.telegramBtn}
                   </Text>
@@ -2147,47 +2415,50 @@ const styles = StyleSheet.create({
   },
   stickyHeaderWrapper: {
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 38 : 16,
-    paddingBottom: 10,
+    paddingTop: Platform.OS === 'android' ? 42 : 16,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     zIndex: 10,
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingBottom: 25,
   },
   topBar: {
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    gap: 12,
+    gap: 6,
   },
   brandContainer: {
-    flexShrink: 1,
-  },
-  titleRow: {
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'nowrap',
+    flex: 1,
+  },
+  titleCol: {
+    justifyContent: 'center',
+    flex: 1,
   },
   modernAppLogoWrap: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: 10,
     overflow: 'hidden',
+    flexShrink: 0,
   },
   appTitle: {
-    fontSize: 22,
-    flexShrink: 1,
+    fontSize: 20,
+    lineHeight: 25,
   },
   appSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 1,
   },
   headerActions: {
     alignItems: 'center',
-    gap: 8,
+    gap: 5,
+    flexShrink: 0,
   },
   actionIconBtn: {
     width: 38,
@@ -2395,6 +2666,38 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  deletedBannerContainer: {
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  deletedBannerContent: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  deletedBannerTitle: {
+    fontSize: 13,
+  },
+  deletedBannerSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  deletedBannerResetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    marginHorizontal: 4,
+  },
+  deletedBannerResetText: {
+    fontSize: 11,
+  },
   chipsContainer: {
     borderRadius: 16,
     paddingVertical: 12,
@@ -2534,17 +2837,67 @@ const styles = StyleSheet.create({
   histToman: {
     fontSize: 13,
   },
+  inlineQuickWrapper: {
+    marginTop: 8,
+  },
+  inlineQuickHeader: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+    paddingHorizontal: 2,
+  },
+  inlineQuickTitleWrap: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  inlineQuickTitleText: {
+    fontSize: 10.5,
+  },
+  inlineQuickSwipeHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  inlineQuickSwipeText: {
+    fontSize: 10,
+  },
+  inlineQuickScroll: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+    flexDirection: 'row',
+  },
+  inlineQuickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+  },
+  inlineQuickSymbol: {
+    fontSize: 11,
+  },
+  inlineQuickText: {
+    fontSize: 11.5,
+    letterSpacing: 0.2,
+  },
   footerContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 8,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 19,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footerLine: {
+    textAlign: 'center',
   },
   footerTextMuted: {
-    fontSize: 12,
+    fontSize: 11,
   },
   footerAuthor: {
-    fontSize: 12,
+    fontSize: 11.5,
   },
   modalOverlay: {
     flex: 1,
